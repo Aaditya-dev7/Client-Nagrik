@@ -6,6 +6,7 @@ export function Header() {
   const { user, logout } = useAuth()
   const loc = useLocation()
   const nav = useNavigate()
+  const GOV_APP_URL = import.meta.env.VITE_GOV_APP_URL || `${window.location.origin}/Gov_Nagrik/`
 
   const tabs = [
     { to: '/', label: 'Home' },
@@ -37,6 +38,7 @@ export function Header() {
           })}
         </nav>
         <div className="flex items-center gap-3">
+          <a href={GOV_APP_URL} className="px-3 py-1.5 rounded-full border border-border text-foreground hover:bg-primary-light text-sm hidden sm:inline">Government</a>
           <ThemeToggle />
           {user ? (
             <>

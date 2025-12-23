@@ -52,9 +52,10 @@
     --card-foreground: 210 40% 98%;
     --popover: 222 47% 8%;
     --popover-foreground: 210 40% 98%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 222 47% 11%;
-    --primary-light: 217 91% 15%;
+    /* Keep brand orange in dark mode */
+    --primary: 24 95% 53%;
+    --primary-foreground: 0 0% 100%;
+    --primary-light: 24 96% 20%;
     --secondary: 217 32% 17%;
     --secondary-foreground: 210 40% 98%;
     --muted: 217 32% 17%;
@@ -69,7 +70,7 @@
     --info-light: 199 89% 18%;
     --border: 217 32% 17%;
     --input: 217 32% 17%;
-    --ring: 217 91% 60%;
+    --ring: 24 95% 53%;
   }
 
   body {

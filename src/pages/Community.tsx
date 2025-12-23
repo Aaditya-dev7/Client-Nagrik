@@ -86,17 +86,17 @@ export default function CommunityPage() {
   )
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-orange-50/40 px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-[calc(100vh-4rem)] bg-background px-4 sm:px-6 lg:px-8 py-8">
       <LoadingOverlay show={loading && list.length === 0} label="Loading feed…" />
       <div className="mx-auto max-w-6xl">
         <div className="mb-6 flex items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
               Community Feed
             </h1>
           </div>
           <Button
-            className="rounded-full bg-orange-500 px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-orange-600"
+            className="rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary-hover"
             onClick={() => nav('/report')}
           >
             Report Issue
@@ -117,7 +117,7 @@ export default function CommunityPage() {
             return (
               <article
                 key={r.report_id}
-                className="overflow-hidden rounded-3xl bg-white shadow-sm border border-orange-100 flex flex-col"
+                className="overflow-hidden rounded-3xl bg-card shadow-sm border border-border flex flex-col"
               >
                 <div className="relative h-52 w-full overflow-hidden">
                   <img
@@ -130,13 +130,13 @@ export default function CommunityPage() {
                 <div className="flex flex-1 flex-col px-6 py-5 space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-1 text-left">
-                      <h2 className="text-lg font-semibold text-slate-900 capitalize">
+                      <h2 className="text-lg font-semibold text-foreground capitalize">
                         {locationTitle.toLowerCase()}
                       </h2>
-                      <p className="text-xs text-slate-500 line-clamp-1">
+                      <p className="text-xs text-muted-foreground line-clamp-1">
                         {r.location_text}
                       </p>
-                      <p className="text-xs text-slate-500">Type: {r.category}</p>
+                      <p className="text-xs text-muted-foreground">Type: {r.category}</p>
                     </div>
                     <span
                       className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${getPriorityClass(r.priority)}`}
@@ -145,12 +145,12 @@ export default function CommunityPage() {
                     </span>
                   </div>
 
-                  <p className="text-sm text-slate-700 line-clamp-2">{r.summary}</p>
+                  <p className="text-sm text-foreground line-clamp-2">{r.summary}</p>
 
-                  <div className="mt-2 flex items-center justify-between gap-3 pt-2 border-t border-slate-100">
+                  <div className="mt-2 flex items-center justify-between gap-3 pt-2 border-t border-border">
                     <div className="flex items-center gap-2">
                       <button
-                        className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-3 py-1 text-xs font-medium text-orange-600 hover:bg-orange-100"
+                        className="inline-flex items-center gap-1 rounded-full bg-primary-light px-3 py-1 text-xs font-medium text-primary hover:brightness-110"
                         onClick={() => {
                           if (user) {
                             upvote(r.report_id, user.id)
@@ -162,7 +162,7 @@ export default function CommunityPage() {
                         <span>{votes}</span>
                       </button>
                       <button
-                        className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                        className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1 text-xs font-medium text-foreground/80 hover:bg-primary-light"
                         type="button"
                       >
                         <MessageCircle className="h-3 w-3" />
@@ -172,7 +172,7 @@ export default function CommunityPage() {
                     <Button
                       type="button"
                       variant="outline"
-                      className="inline-flex items-center gap-1 rounded-full border-orange-200 text-xs text-orange-600 hover:bg-orange-50"
+                      className="inline-flex items-center gap-1 rounded-full border-border text-xs text-primary hover:bg-primary-light"
                       onClick={() => nav(`/reports/${r.report_id}`)}
                     >
                       <Eye className="h-3 w-3" />

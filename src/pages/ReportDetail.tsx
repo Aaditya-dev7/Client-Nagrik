@@ -106,14 +106,14 @@ export default function ReportDetailPage() {
     'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1200&q=80'
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-slate-50/60 py-8 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-[calc(100vh-4rem)] bg-background py-8 px-4 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-3xl space-y-6">
         <Button variant="outline" className="inline-flex items-center gap-1" onClick={() => nav(-1)}>
           <ArrowLeft className="h-4 w-4" />
           Back to Community
         </Button>
 
-        <article className="overflow-hidden rounded-3xl bg-white shadow-sm border border-slate-200">
+        <article className="overflow-hidden rounded-3xl bg-card shadow-sm border border-border">
           <div className="h-64 w-full overflow-hidden">
             <img src={primaryImage} alt={report.summary || report.category} className="h-full w-full object-cover" />
           </div>
@@ -122,8 +122,8 @@ export default function ReportDetailPage() {
             <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="space-y-1">
                 <div className="text-xs font-mono text-orange-500">{report.report_id}</div>
-                <h1 className="text-xl font-semibold text-slate-900">{report.summary}</h1>
-                <p className="text-xs text-slate-500">
+                <h1 className="text-xl font-semibold text-foreground">{report.summary}</h1>
+                <p className="text-xs text-muted-foreground">
                   Submitted on {new Date(report.submitted_at).toLocaleString()}
                 </p>
               </div>
@@ -131,60 +131,60 @@ export default function ReportDetailPage() {
                 <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${statusClasses[report.status]}`}>
                   {report.status}
                 </span>
-                <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs font-semibold text-foreground/80">
                   Priority: {report.priority}
                 </span>
               </div>
             </header>
 
             <section className="grid gap-4 sm:grid-cols-2">
-              <div className="flex items-start gap-2 text-sm text-slate-800">
+              <div className="flex items-start gap-2 text-sm text-foreground">
                 <MapPin className="mt-0.5 h-4 w-4 text-emerald-600" />
                 <div>
                   <div className="font-medium">Location</div>
-                  <div className="text-xs text-slate-600">{report.location_text}</div>
+                  <div className="text-xs text-muted-foreground">{report.location_text}</div>
                 </div>
               </div>
-              <div className="flex items-start gap-2 text-sm text-slate-800">
+              <div className="flex items-start gap-2 text-sm text-foreground">
                 <Flag className="mt-0.5 h-4 w-4 text-blue-600" />
                 <div>
                   <div className="font-medium">Category</div>
-                  <div className="text-xs text-slate-600">{report.category}</div>
+                  <div className="text-xs text-muted-foreground">{report.category}</div>
                 </div>
               </div>
-              <div className="flex items-start gap-2 text-sm text-slate-800">
+              <div className="flex items-start gap-2 text-sm text-foreground">
                 <Clock className="mt-0.5 h-4 w-4 text-slate-700" />
                 <div>
                   <div className="font-medium">Reported at</div>
-                  <div className="text-xs text-slate-600">{new Date(report.submitted_at).toLocaleString()}</div>
+                  <div className="text-xs text-muted-foreground">{new Date(report.submitted_at).toLocaleString()}</div>
                 </div>
               </div>
-              <div className="flex items-start gap-2 text-sm text-slate-800">
+              <div className="flex items-start gap-2 text-sm text-foreground">
                 <User className="mt-0.5 h-4 w-4 text-slate-700" />
                 <div>
                   <div className="font-medium">Reported by</div>
-                  <div className="text-xs text-slate-600">{report.reporter.name}</div>
+                  <div className="text-xs text-muted-foreground">{report.reporter.name}</div>
                 </div>
               </div>
             </section>
 
-            <section className="space-y-3 border-t border-slate-100 pt-4 mt-2">
-              <div className="text-sm font-medium text-slate-900">Assignment</div>
+            <section className="space-y-3 border-t border-border pt-4 mt-2">
+              <div className="text-sm font-medium text-foreground">Assignment</div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="flex items-start gap-2 text-sm text-slate-800">
+                <div className="flex items-start gap-2 text-sm text-foreground">
                   <Building2 className="mt-0.5 h-4 w-4 text-indigo-600" />
                   <div>
                     <div className="font-medium">Department</div>
-                    <div className="text-xs text-slate-600">{report.assigned_department || 'Not assigned'}</div>
+                    <div className="text-xs text-muted-foreground">{report.assigned_department || 'Not assigned'}</div>
                   </div>
                 </div>
-                <div className="flex items-start gap-2 text-sm text-slate-800">
+                <div className="flex items-start gap-2 text-sm text-foreground">
                   <User className="mt-0.5 h-4 w-4 text-slate-700" />
                   <div>
                     <div className="font-medium">Officer</div>
-                    <div className="text-xs text-slate-600">{report.assigned_officer_name || 'Unassigned'}</div>
+                    <div className="text-xs text-muted-foreground">{report.assigned_officer_name || 'Unassigned'}</div>
                     {(report.assigned_officer_phone || report.assigned_officer_email) ? (
-                      <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-600">
+                      <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                         {report.assigned_officer_phone && (
                           <span className="inline-flex items-center gap-1"><Phone className="h-3 w-3" />{report.assigned_officer_phone}</span>
                         )}
@@ -193,7 +193,7 @@ export default function ReportDetailPage() {
                         )}
                       </div>
                     ) : (
-                      <div className="mt-1 text-xs text-slate-500">Officer contact not available</div>
+                      <div className="mt-1 text-xs text-muted-foreground">Officer contact not available</div>
                     )}
                   </div>
                 </div>
@@ -201,16 +201,16 @@ export default function ReportDetailPage() {
             </section>
 
             <section className="space-y-2">
-              <div className="flex items-center gap-2 text-sm font-medium text-slate-900">
+              <div className="flex items-center gap-2 text-sm font-medium text-foreground">
                 <AlertTriangle className="h-4 w-4 text-amber-500" />
                 Issue details
               </div>
-              <p className="text-sm text-slate-700 whitespace-pre-line">{report.description}</p>
+              <p className="text-sm text-foreground whitespace-pre-line">{report.description}</p>
             </section>
 
-            <section className="space-y-2 border-t border-slate-100 pt-4 mt-2">
-              <div className="text-sm font-medium text-slate-900">Progress</div>
-              <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
+            <section className="space-y-2 border-t border-border pt-4 mt-2">
+              <div className="text-sm font-medium text-foreground">Progress</div>
+              <div className="w-full h-2 rounded-full bg-muted overflow-hidden">
                 <div
                   className={[
                     'h-full rounded-full transition-all duration-500',
@@ -219,11 +219,11 @@ export default function ReportDetailPage() {
                   style={{ width: `${progress}%` }}
                 />
               </div>
-              <div className="text-sm font-medium text-slate-900">Progress timeline</div>
+              <div className="text-sm font-medium text-foreground">Progress timeline</div>
               {report.timeline.length === 0 ? (
                 <p className="text-xs text-muted-foreground">No timeline updates yet.</p>
               ) : (
-                <ul className="space-y-1 text-xs text-slate-700">
+                <ul className="space-y-1 text-xs text-foreground/80">
                   {report.timeline.map((t, i) => (
                     <li key={i}>
                       <span className="font-medium">{new Date(t.at).toLocaleString()}</span>

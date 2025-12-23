@@ -46,31 +46,31 @@ export default function HomePage() {
   const { total, resolved, inProgress } = counts
 
   return (
-    <div className="relative min-h-[calc(100vh-4rem)] bg-gradient-to-b from-orange-50/60 via-white to-white flex items-center px-4 sm:px-6 lg:px-8">
+    <div className="relative min-h-[calc(100vh-4rem)] bg-background flex items-center px-4 sm:px-6 lg:px-8">
       <LoadingOverlay show={loading} label="Loading overview…" />
       <div className="mx-auto flex max-w-5xl flex-col items-center text-center space-y-10 py-10 sm:py-16">
         <section className="space-y-5">
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold leading-tight tracking-tight">
-            <span className="block text-slate-900">Empower Your Voice,</span>
+            <span className="block text-foreground">Empower Your Voice,</span>
             <span className="mt-1 inline-block bg-gradient-to-r from-orange-500 to-orange-600 bg-clip-text text-transparent">
               Transform Your City
             </span>
           </h1>
-          <p className="max-w-2xl mx-auto text-base sm:text-lg text-slate-600">
+          <p className="max-w-2xl mx-auto text-base sm:text-lg text-muted-foreground">
             Report civic issues instantly. Track progress in real-time. Build a better community together.
           </p>
         </section>
 
         <section className="flex flex-wrap justify-center gap-4">
           <Button
-            className="rounded-full px-6 py-2 text-sm sm:text-base bg-orange-500 hover:bg-orange-600 text-white shadow-sm"
+            className="rounded-full px-6 py-2 text-sm sm:text-base bg-primary hover:bg-primary-hover text-primary-foreground shadow-sm"
             onClick={() => nav('/report')}
           >
             Report an Issue
           </Button>
           <Button
             variant="outline"
-            className="rounded-full px-6 py-2 text-sm sm:text-base border-orange-200 text-orange-600 hover:bg-orange-50"
+            className="rounded-full px-6 py-2 text-sm sm:text-base border border-border text-primary hover:bg-primary-light"
             onClick={() => nav('/community')}
           >
             View Community Feed
@@ -78,17 +78,17 @@ export default function HomePage() {
         </section>
 
         <section className="mt-4 grid w-full max-w-3xl gap-4 sm:grid-cols-3">
-          <div className="rounded-2xl bg-white/80 border border-orange-100 shadow-sm px-8 py-6">
-            <div className="text-4xl font-bold text-orange-500">{total}</div>
-            <div className="mt-2 text-sm font-medium text-slate-700">Issues Reported</div>
+          <div className="rounded-2xl bg-card/80 border border-border shadow-sm px-8 py-6">
+            <div className="text-4xl font-bold text-primary">{total}</div>
+            <div className="mt-2 text-sm font-medium text-muted-foreground">Issues Reported</div>
           </div>
-          <div className="rounded-2xl bg-white/80 border border-orange-100 shadow-sm px-8 py-6">
-            <div className="text-4xl font-bold text-orange-500">{resolved}</div>
-            <div className="mt-2 text-sm font-medium text-slate-700">Issues Resolved</div>
+          <div className="rounded-2xl bg-card/80 border border-border shadow-sm px-8 py-6">
+            <div className="text-4xl font-bold text-primary">{resolved}</div>
+            <div className="mt-2 text-sm font-medium text-muted-foreground">Issues Resolved</div>
           </div>
-          <div className="rounded-2xl bg-white/80 border border-orange-100 shadow-sm px-8 py-6">
-            <div className="text-4xl font-bold text-orange-500">{inProgress}</div>
-            <div className="mt-2 text-sm font-medium text-slate-700">In Progress</div>
+          <div className="rounded-2xl bg-card/80 border border-border shadow-sm px-8 py-6">
+            <div className="text-4xl font-bold text-primary">{inProgress}</div>
+            <div className="mt-2 text-sm font-medium text-muted-foreground">In Progress</div>
           </div>
         </section>
       </div>

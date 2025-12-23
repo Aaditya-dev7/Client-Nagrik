@@ -81,23 +81,23 @@ export default function ProfilePage() {
   const myTier = myKarma >= 200 ? 'Legend' : myKarma >= 100 ? 'Pro' : myKarma >= 50 ? 'Active' : 'Newcomer'
 
   return (
-    <div className="relative min-h-[calc(100vh-4rem)] bg-slate-50/60 px-4 sm:px-6 lg:px-8 py-8">
+    <div className="relative min-h-[calc(100vh-4rem)] bg-background px-4 sm:px-6 lg:px-8 py-8">
       <LoadingOverlay show={loading && list.length === 0} label="Loading your reports…" />
       <div className="mx-auto max-w-6xl">
         <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="rounded-2xl bg-white border border-orange-100 shadow-sm px-6 py-5">
-            <div className="text-xs text-slate-500">User</div>
-            <div className="mt-1 text-lg font-semibold text-slate-900 truncate">{user?.name || 'Citizen'}</div>
+          <div className="rounded-2xl bg-card border border-border shadow-sm px-6 py-5">
+            <div className="text-xs text-muted-foreground">User</div>
+            <div className="mt-1 text-lg font-semibold text-foreground truncate">{user?.name || 'Citizen'}</div>
           </div>
-          <div className="rounded-2xl bg-white border border-orange-100 shadow-sm px-6 py-5">
-            <div className="text-xs text-slate-500">Reports submitted</div>
-            <div className="mt-1 text-2xl font-extrabold text-orange-600">{myCount}</div>
+          <div className="rounded-2xl bg-card border border-border shadow-sm px-6 py-5">
+            <div className="text-xs text-muted-foreground">Reports submitted</div>
+            <div className="mt-1 text-2xl font-extrabold text-primary">{myCount}</div>
           </div>
-          <div className="rounded-2xl bg-white border border-orange-100 shadow-sm px-6 py-5">
-            <div className="text-xs text-slate-500">Karma · Popularity</div>
+          <div className="rounded-2xl bg-card border border-border shadow-sm px-6 py-5">
+            <div className="text-xs text-muted-foreground">Karma · Popularity</div>
             <div className="mt-1 flex items-baseline gap-2">
-              <div className="text-2xl font-extrabold text-orange-600">{myKarma}</div>
-              <span className="text-xs px-2 py-1 rounded-full bg-orange-50 text-orange-700 border border-orange-200">{myTier}</span>
+              <div className="text-2xl font-extrabold text-primary">{myKarma}</div>
+              <span className="text-xs px-2 py-1 rounded-full bg-primary-light text-primary border border-border">{myTier}</span>
             </div>
           </div>
         </div>
@@ -121,7 +121,7 @@ export default function ProfilePage() {
             return (
               <article
                 key={r.report_id}
-                className="overflow-hidden rounded-3xl bg-white shadow-sm border border-slate-200 flex flex-col"
+                className="overflow-hidden rounded-3xl bg-card shadow-sm border border-border flex flex-col"
               >
                 <div className="relative h-48 w-full overflow-hidden">
                   <img
@@ -134,13 +134,13 @@ export default function ProfilePage() {
                 <div className="flex flex-1 flex-col px-6 py-5 space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-1 text-left">
-                      <h2 className="text-lg font-semibold text-slate-900 capitalize">
+                      <h2 className="text-lg font-semibold text-foreground capitalize">
                         {locationTitle.toLowerCase()}
                       </h2>
-                      <p className="text-xs text-slate-500 line-clamp-1">
+                      <p className="text-xs text-muted-foreground line-clamp-1">
                         {r.location_text}
                       </p>
-                      <p className="text-xs text-slate-500">Type: {r.category}</p>
+                      <p className="text-xs text-muted-foreground">Type: {r.category}</p>
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       <span
@@ -158,14 +158,14 @@ export default function ProfilePage() {
                     </div>
                   </div>
 
-                  <p className="text-sm text-slate-700 line-clamp-2">{r.summary}</p>
+                  <p className="text-sm text-foreground line-clamp-2">{r.summary}</p>
 
-                  <div className="grid gap-2 text-xs text-slate-700 sm:grid-cols-2">
+                  <div className="grid gap-2 text-xs text-foreground/80 sm:grid-cols-2">
                     <div className="flex items-start gap-2">
                       <Building2 className="mt-0.5 h-3.5 w-3.5 text-slate-600" />
                       <div>
                         <div className="font-medium">Department</div>
-                        <div className="text-slate-500">
+                        <div className="text-muted-foreground">
                           {r.assigned_department || 'Not assigned yet'}
                         </div>
                       </div>
@@ -174,7 +174,7 @@ export default function ProfilePage() {
                       <BadgeCheck className="mt-0.5 h-3.5 w-3.5 text-slate-600" />
                       <div>
                         <div className="font-medium">Officer</div>
-                        <div className="text-slate-500">
+                        <div className="text-muted-foreground">
                           {r.assigned_officer_name || 'Unassigned'}
                         </div>
                       </div>
@@ -183,7 +183,7 @@ export default function ProfilePage() {
                       <Clock className="mt-0.5 h-3.5 w-3.5 text-slate-600" />
                       <div>
                         <div className="font-medium">Reported at</div>
-                        <div className="text-slate-500">
+                        <div className="text-muted-foreground">
                           {new Date(r.submitted_at).toLocaleString()}
                         </div>
                       </div>
@@ -192,23 +192,23 @@ export default function ProfilePage() {
                       <User className="mt-0.5 h-3.5 w-3.5 text-slate-600" />
                       <div>
                         <div className="font-medium">Reporter</div>
-                        <div className="text-slate-500">{r.reporter.name}</div>
+                        <div className="text-muted-foreground">{r.reporter.name}</div>
                       </div>
                     </div>
                   </div>
 
-                  <div className="space-y-1 border-t border-slate-100 pt-3 mt-1">
-                    <div className="flex items-center gap-2 text-xs font-medium text-slate-900">
+                  <div className="space-y-1 border-t border-border pt-3 mt-1">
+                    <div className="flex items-center gap-2 text-xs font-medium text-foreground">
                       <MapPin className="h-3.5 w-3.5 text-emerald-600" />
                       <span>Progress timeline</span>
                     </div>
                     {lastTimeline ? (
-                      <p className="text-[11px] text-slate-600">
+                      <p className="text-[11px] text-muted-foreground">
                         Last update on {new Date(lastTimeline.at).toLocaleString()} —{' '}
                         <span className="font-semibold">{lastTimeline.actor}</span>: {lastTimeline.action}
                       </p>
                     ) : (
-                      <p className="text-[11px] text-slate-500">No timeline updates yet.</p>
+                      <p className="text-[11px] text-muted-foreground">No timeline updates yet.</p>
                     )}
                   </div>
 
@@ -216,7 +216,7 @@ export default function ProfilePage() {
                     <Button
                       type="button"
                       variant="outline"
-                      className="inline-flex items-center gap-1 rounded-full border-orange-200 text-xs text-orange-600 hover:bg-orange-50"
+                      className="inline-flex items-center gap-1 rounded-full border-border text-xs text-primary hover:bg-primary-light"
                       onClick={() => nav(`/reports/${r.report_id}`)}
                     >
                       <Eye className="h-3 w-3" />

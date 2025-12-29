@@ -2,17 +2,25 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
 let client: SupabaseClient | null = null
 
-export function isSupabaseEnabled() {
-  return Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY)
+export function isSupabaseEnabled(): boolean {
+  return Boolean(
+    import.meta.env.VITE_SUPABASE_URL &&
+    import.meta.env.VITE_SUPABASE_ANON_KEY
+  )
 }
 
 export function getSupabase(): SupabaseClient | null {
-  if (!isSupabaseEnabled()) return null
-  if (!client) {
-    client = createClient(
-      import.meta.env.VITE_SUPABASE_URL as string,
-      import.meta.env.VITE_SUPABASE_ANON_KEY as string
-    )
+  const url = import.meta.env.VITE_SUPABASE_URL
+  const key = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+  // ✅ Build-time safe guard
+  if (!url || !key) {
+    return null
   }
+
+  if (!client) {
+    client = createClient(url, key)
+  }
+
   return client
 }

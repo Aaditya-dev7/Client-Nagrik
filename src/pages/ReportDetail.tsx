@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Report } from '@/lib/types'
-import { loadReports } from '@/lib/storage'
-import { isSupabaseEnabled, supabaseGetReportById, supabaseListTimelines, subscribeReports, supabaseListReportMedia } from '@/lib/api'
+import { loadReports, saveReports } from '@/lib/storage'
+import { isSupabaseEnabled, supabaseGetReportById, supabaseListTimelines, subscribeReports, supabaseListReportMedia, supabaseDeleteReport } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import LoadingOverlay from '@/components/LoadingOverlay'
 import { ArrowLeft, MapPin, Flag, Clock, User, AlertTriangle, Building2, Phone, Mail } from 'lucide-react'
@@ -12,6 +12,7 @@ export default function ReportDetailPage() {
   const nav = useNavigate()
   const [report, setReport] = useState<Report | null>(null)
   const [loading, setLoading] = useState(true)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -105,6 +106,32 @@ export default function ReportDetailPage() {
   const primaryImage = report.media && report.media.length > 0 ? report.media[0] :
     'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1200&q=80'
 
+  const latestTimeline = report.timeline.length > 0 ? report.timeline[report.timeline.length - 1] : null
+  const latestNoteText = (() => {
+    if (!latestTimeline) return null
+    const a = latestTimeline.action || ''
+    const m = a.match(/Added progress note\s*-\s*"([\s\S]*)"/)
+    if (m && m[1]) return m[1]
+    return a
+  })()
+
+  const canDelete = report.status === 'Resolved'
+
+  async function handleDelete() {
+    if (!report) return
+    if (!canDelete) return
+    setDeleting(true)
+    try {
+      const id = report.report_id
+      const ok = isSupabaseEnabled() ? await supabaseDeleteReport(id) : true
+      const list = loadReports().filter(r => r.report_id !== id)
+      saveReports(list)
+      nav(-1)
+    } catch {
+      setDeleting(false)
+    }
+  }
+
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-background py-8 px-4 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-3xl space-y-6">
@@ -134,6 +161,11 @@ export default function ReportDetailPage() {
                 <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs font-semibold text-foreground/80">
                   Priority: {report.priority}
                 </span>
+                {canDelete && (
+                  <Button variant="destructive" className="ml-auto" onClick={handleDelete} disabled={deleting}>
+                    {deleting ? 'Deleting…' : 'Delete report'}
+                  </Button>
+                )}
               </div>
             </header>
 
@@ -236,6 +268,18 @@ export default function ReportDetailPage() {
                 </ul>
               )}
             </section>
+
+            {latestTimeline && (
+              <section className="mt-2">
+                <div className="rounded-lg border bg-muted/50 p-4">
+                  <div className="text-sm font-medium text-foreground mb-1">Latest update</div>
+                  <div className="text-xs text-muted-foreground">
+                    <div className="mb-1">{new Date(latestTimeline.at).toLocaleString()} · {latestTimeline.actor}</div>
+                    <div className="whitespace-pre-wrap">{latestNoteText}</div>
+                  </div>
+                </div>
+              </section>
+            )}
           </div>
         </article>
       </div>

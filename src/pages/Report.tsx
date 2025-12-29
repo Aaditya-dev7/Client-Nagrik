@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { geocodeAddress } from '@/lib/geocoding'
+import { geocodeAddress, isCoordinateInIndia } from '@/lib/geocoding'
 import { Report } from '@/lib/types'
 import { loadReports, saveReports } from '@/lib/storage'
 import { isSupabaseEnabled, supabaseInsertReport, supabaseUploadReportPhoto } from '@/lib/api'
@@ -12,6 +12,7 @@ import { Select as UISelect } from '@/components/ui/select'
 import { Alert } from '@/components/ui/alert'
 import { AlertTriangle, Flag, MapPin, FileText, Image as ImageIcon, Clock as ClockIcon, Info } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
+import { validateImageMatchesDescription } from '@/lib/ai'
 
 function id() {
   return 'CR-' + Math.random().toString(36).slice(2, 8)
@@ -102,9 +103,6 @@ export default function ReportPage() {
 
     setSubmitting(true)
 
-    // Simulate a short delay so loading state is visible even on fast connections.
-    await new Promise((resolve) => setTimeout(resolve, 600))
-
     try {
       const reportId = id()
       let lat: number
@@ -112,10 +110,36 @@ export default function ReportPage() {
       if (pickedLat != null && pickedLng != null) {
         lat = pickedLat
         lng = pickedLng
+        const inIndia = await isCoordinateInIndia(lat, lng)
+        if (!inIndia) {
+          setFieldErrors((prev) => ({ ...prev, location: 'Reports are accepted only within India.' }))
+          setSubmitting(false)
+          return
+        }
       } else {
         const coords = await geocodeAddress(locationText)
-        lat = coords?.lat ?? 18.9489
-        lng = coords?.lng ?? 73.2245
+        if (!coords) {
+          setFieldErrors((prev) => ({ ...prev, location: 'Please enter a valid location in India.' }))
+          setSubmitting(false)
+          return
+        }
+        lat = coords.lat
+        lng = coords.lng
+        const inIndia = await isCoordinateInIndia(lat, lng)
+        if (!inIndia) {
+          setFieldErrors((prev) => ({ ...prev, location: 'Reports are accepted only within India.' }))
+          setSubmitting(false)
+          return
+        }
+      }
+
+      if (photo) {
+        const ai = await validateImageMatchesDescription(photo, description)
+        if (!ai.ok) {
+          setFormError(ai.reason || 'The attached photo does not appear to match the description.')
+          setSubmitting(false)
+          return
+        }
       }
 
       // If a photo is attached, include a local preview URL and, if Supabase enabled, upload to storage for a public URL
@@ -203,7 +227,7 @@ export default function ReportPage() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-slate-50/80 py-8 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-[calc(100vh-4rem)] bg-background/80 py-8 px-4 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-3xl space-y-4">
         <Alert variant="info" className="flex items-start gap-2">
           <Info className="mt-0.5 h-4 w-4" aria-hidden="true" />
@@ -215,8 +239,8 @@ export default function ReportPage() {
           </div>
         </Alert>
 
-        <div className="rounded-2xl border bg-white shadow-sm">
-          <div className="border-b bg-slate-50/60 px-6 py-4">
+        <div className="rounded-2xl border bg-card shadow-sm">
+          <div className="border-b bg-muted/60 px-6 py-4">
             <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Report a civic issue</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Help your local authorities respond faster by sharing clear details.

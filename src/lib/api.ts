@@ -24,6 +24,23 @@ function mapDbToReport(row: any): Report {
     deadline: row.deadline ?? null,
     timeline: [],
   }
+
+export async function supabaseDeleteReport(id: string): Promise<boolean> {
+  const sb = getSupabase()
+  if (!sb) return false
+  try {
+    await sb.from('report_timeline').delete().eq('report_id', id)
+    try {
+      const { data: files } = await sb.storage.from('reports').list(id)
+      if (files && files.length) {
+        await sb.storage.from('reports').remove(files.map((f: any) => `${id}/${f.name}`))
+      }
+    } catch {}
+    await sb.from('reports').delete().eq('id', id)
+    return true
+  } catch {
+    return false
+  }
 }
 
 export async function supabaseListReports(limit?: number, offset?: number): Promise<Report[] | null> {

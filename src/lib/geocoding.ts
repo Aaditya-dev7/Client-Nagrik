@@ -40,6 +40,33 @@ export async function geocodeAddress(query: string): Promise<{ lat: number; lng:
   return null
 }
 
+function isWithinIndiaBBox(lat: number, lng: number): boolean {
+  return lat >= 6 && lat <= 37.1 && lng >= 68 && lng <= 97.5
+}
+
+async function verifyIndiaByReverseGeocode(lat: number, lng: number): Promise<boolean> {
+  try {
+    const controller = new AbortController()
+    const tid = setTimeout(() => controller.abort(), 5000)
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`
+    const res = await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal })
+    clearTimeout(tid)
+    if (res.ok) {
+      const data = await res.json()
+      const code = data?.address?.country_code as string | undefined
+      if (code && code.toLowerCase() === 'in') return true
+      return false
+    }
+  } catch {}
+  return isWithinIndiaBBox(lat, lng)
+}
+
+export async function isCoordinateInIndia(lat: number, lng: number): Promise<boolean> {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false
+  if (!isWithinIndiaBBox(lat, lng)) return false
+  return verifyIndiaByReverseGeocode(lat, lng)
+}
+
 export async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
   const key = `rev:${lat.toFixed(5)},${lng.toFixed(5)}`
   try {

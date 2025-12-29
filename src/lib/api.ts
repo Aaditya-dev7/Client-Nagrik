@@ -25,6 +25,8 @@ function mapDbToReport(row: any): Report {
     timeline: [],
   }
 
+}
+
 export async function supabaseDeleteReport(id: string): Promise<boolean> {
   const sb = getSupabase()
   if (!sb) return false

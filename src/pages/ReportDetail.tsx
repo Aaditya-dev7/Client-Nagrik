@@ -7,8 +7,10 @@ import { supabaseGetReportById, supabaseListTimelines, subscribeReports, supabas
 import { Button } from '@/components/ui/button'
 import LoadingOverlay from '@/components/LoadingOverlay'
 import { ArrowLeft, MapPin, Flag, Clock, User, AlertTriangle, Building2, Phone, Mail } from 'lucide-react'
+import { t, useLang } from '@/lib/i18n'
 
 export default function ReportDetailPage() {
+  const _lang = useLang()
   const { id } = useParams<{ id: string }>()
   const nav = useNavigate()
   const [report, setReport] = useState<Report | null>(null)
@@ -65,7 +67,7 @@ export default function ReportDetailPage() {
   if (loading) {
     return (
       <div className="relative min-h-[calc(100vh-4rem)]">
-        <LoadingOverlay show label="Loading report…" />
+        <LoadingOverlay show label={t('report_detail.loading', 'Loading report…')} />
       </div>
     )
   }
@@ -75,9 +77,9 @@ export default function ReportDetailPage() {
       <div className="max-w-3xl mx-auto py-10 space-y-4">
         <Button variant="outline" className="inline-flex items-center gap-1" onClick={() => nav(-1)}>
           <ArrowLeft className="h-4 w-4" />
-          Back
+          {t('common.back', 'Back')}
         </Button>
-        <p className="text-sm text-muted-foreground">Report not found. It may have been removed.</p>
+        <p className="text-sm text-muted-foreground">{t('report_detail.not_found', 'Report not found. It may have been removed.')}</p>
       </div>
     )
   }
@@ -138,7 +140,7 @@ export default function ReportDetailPage() {
       <div className="mx-auto max-w-3xl space-y-6">
         <Button variant="outline" className="inline-flex items-center gap-1" onClick={() => nav(-1)}>
           <ArrowLeft className="h-4 w-4" />
-          Back to Community
+          {t('report_detail.back_to_community', 'Back to Community')}
         </Button>
 
         <article className="overflow-hidden rounded-3xl bg-card shadow-sm border border-border">
@@ -152,7 +154,7 @@ export default function ReportDetailPage() {
                 <div className="text-xs font-mono text-orange-500">{report.report_id}</div>
                 <h1 className="text-xl font-semibold text-foreground">{report.summary}</h1>
                 <p className="text-xs text-muted-foreground">
-                  Submitted on {new Date(report.submitted_at).toLocaleString()}
+                  {t('report_detail.submitted_on', 'Submitted on')} {new Date(report.submitted_at).toLocaleString()}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -160,11 +162,11 @@ export default function ReportDetailPage() {
                   {report.status}
                 </span>
                 <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs font-semibold text-foreground/80">
-                  Priority: {report.priority}
+                  {t('report_detail.priority', 'Priority')}: {report.priority}
                 </span>
                 {canDelete && (
                   <Button variant="destructive" className="ml-auto" onClick={handleDelete} disabled={deleting}>
-                    {deleting ? 'Deleting…' : 'Delete report'}
+                    {deleting ? t('common.deleting', 'Deleting…') : t('report_detail.delete', 'Delete report')}
                   </Button>
                 )}
               </div>
@@ -174,48 +176,48 @@ export default function ReportDetailPage() {
               <div className="flex items-start gap-2 text-sm text-foreground">
                 <MapPin className="mt-0.5 h-4 w-4 text-emerald-600" />
                 <div>
-                  <div className="font-medium">Location</div>
+                  <div className="font-medium">{t('report_detail.location', 'Location')}</div>
                   <div className="text-xs text-muted-foreground">{report.location_text}</div>
                 </div>
               </div>
               <div className="flex items-start gap-2 text-sm text-foreground">
                 <Flag className="mt-0.5 h-4 w-4 text-blue-600" />
                 <div>
-                  <div className="font-medium">Category</div>
+                  <div className="font-medium">{t('report_detail.category', 'Category')}</div>
                   <div className="text-xs text-muted-foreground">{report.category}</div>
                 </div>
               </div>
               <div className="flex items-start gap-2 text-sm text-foreground">
                 <Clock className="mt-0.5 h-4 w-4 text-slate-700" />
                 <div>
-                  <div className="font-medium">Reported at</div>
+                  <div className="font-medium">{t('profile.reported_at', 'Reported at')}</div>
                   <div className="text-xs text-muted-foreground">{new Date(report.submitted_at).toLocaleString()}</div>
                 </div>
               </div>
               <div className="flex items-start gap-2 text-sm text-foreground">
                 <User className="mt-0.5 h-4 w-4 text-slate-700" />
                 <div>
-                  <div className="font-medium">Reported by</div>
+                  <div className="font-medium">{t('report_detail.reported_by', 'Reported by')}</div>
                   <div className="text-xs text-muted-foreground">{report.reporter.name}</div>
                 </div>
               </div>
             </section>
 
             <section className="space-y-3 border-t border-border pt-4 mt-2">
-              <div className="text-sm font-medium text-foreground">Assignment</div>
+              <div className="text-sm font-medium text-foreground">{t('report_detail.assignment', 'Assignment')}</div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="flex items-start gap-2 text-sm text-foreground">
                   <Building2 className="mt-0.5 h-4 w-4 text-indigo-600" />
                   <div>
-                    <div className="font-medium">Department</div>
-                    <div className="text-xs text-muted-foreground">{report.assigned_department || 'Not assigned'}</div>
+                    <div className="font-medium">{t('profile.department', 'Department')}</div>
+                    <div className="text-xs text-muted-foreground">{report.assigned_department || t('report_detail.not_assigned', 'Not assigned')}</div>
                   </div>
                 </div>
                 <div className="flex items-start gap-2 text-sm text-foreground">
                   <User className="mt-0.5 h-4 w-4 text-slate-700" />
                   <div>
-                    <div className="font-medium">Officer</div>
-                    <div className="text-xs text-muted-foreground">{report.assigned_officer_name || 'Unassigned'}</div>
+                    <div className="font-medium">{t('profile.officer', 'Officer')}</div>
+                    <div className="text-xs text-muted-foreground">{report.assigned_officer_name || t('profile.unassigned', 'Unassigned')}</div>
                     {(report.assigned_officer_phone || report.assigned_officer_email) ? (
                       <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                         {report.assigned_officer_phone && (
@@ -226,7 +228,7 @@ export default function ReportDetailPage() {
                         )}
                       </div>
                     ) : (
-                      <div className="mt-1 text-xs text-muted-foreground">Officer contact not available</div>
+                      <div className="mt-1 text-xs text-muted-foreground">{t('report_detail.officer_contact_na', 'Officer contact not available')}</div>
                     )}
                   </div>
                 </div>
@@ -236,13 +238,13 @@ export default function ReportDetailPage() {
             <section className="space-y-2">
               <div className="flex items-center gap-2 text-sm font-medium text-foreground">
                 <AlertTriangle className="h-4 w-4 text-amber-500" />
-                Issue details
+                {t('report_detail.issue_details', 'Issue details')}
               </div>
               <p className="text-sm text-foreground whitespace-pre-line">{report.description}</p>
             </section>
 
             <section className="space-y-2 border-t border-border pt-4 mt-2">
-              <div className="text-sm font-medium text-foreground">Progress</div>
+              <div className="text-sm font-medium text-foreground">{t('report_detail.progress', 'Progress')}</div>
               <div className="w-full h-2 rounded-full bg-muted overflow-hidden">
                 <div
                   className={[
@@ -252,9 +254,9 @@ export default function ReportDetailPage() {
                   style={{ width: `${progress}%` }}
                 />
               </div>
-              <div className="text-sm font-medium text-foreground">Progress timeline</div>
+              <div className="text-sm font-medium text-foreground">{t('profile.progress_timeline', 'Progress timeline')}</div>
               {report.timeline.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No timeline updates yet.</p>
+                <p className="text-xs text-muted-foreground">{t('profile.no_timeline', 'No timeline updates yet.')}</p>
               ) : (
                 <ul className="space-y-1 text-xs text-foreground/80">
                   {report.timeline.map((t, i) => (
@@ -273,7 +275,7 @@ export default function ReportDetailPage() {
             {latestTimeline && (
               <section className="mt-2">
                 <div className="rounded-lg border bg-muted/50 p-4">
-                  <div className="text-sm font-medium text-foreground mb-1">Latest update</div>
+                  <div className="text-sm font-medium text-foreground mb-1">{t('report_detail.latest_update', 'Latest update')}</div>
                   <div className="text-xs text-muted-foreground">
                     <div className="mb-1">{new Date(latestTimeline.at).toLocaleString()} · {latestTimeline.actor}</div>
                     <div className="whitespace-pre-wrap">{latestNoteText}</div>

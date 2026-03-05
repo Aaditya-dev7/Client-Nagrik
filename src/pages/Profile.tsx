@@ -7,6 +7,7 @@ import { isSupabaseEnabled, supabaseListReports, supabaseListTimelines, subscrib
 import { Button } from '@/components/ui/button'
 import LoadingOverlay from '@/components/LoadingOverlay'
 import { MapPin, Flag, Clock, User, Eye, Building2, BadgeCheck } from 'lucide-react'
+import { t, useLang } from '@/lib/i18n'
 
 function getPriorityClass(priority: Report['priority']) {
   switch (priority) {
@@ -31,6 +32,7 @@ const statusClasses: Record<Report['status'], string> = {
 }
 
 export default function ProfilePage() {
+  const _lang = useLang()
   const { user } = useAuth()
   const [list, setList] = useState<Report[]>([])
   const nav = useNavigate()
@@ -82,19 +84,19 @@ export default function ProfilePage() {
 
   return (
     <div className="relative min-h-[calc(100vh-4rem)] bg-background px-4 sm:px-6 lg:px-8 py-8">
-      <LoadingOverlay show={loading && list.length === 0} label="Loading your reports…" />
+      <LoadingOverlay show={loading && list.length === 0} label={t('profile.loading', 'Loading your reports…')} />
       <div className="mx-auto max-w-6xl">
         <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="rounded-2xl bg-card border border-border shadow-sm px-6 py-5">
-            <div className="text-xs text-muted-foreground">User</div>
+            <div className="text-xs text-muted-foreground">{t('profile.user', 'User')}</div>
             <div className="mt-1 text-lg font-semibold text-foreground truncate">{user?.name || 'Citizen'}</div>
           </div>
           <div className="rounded-2xl bg-card border border-border shadow-sm px-6 py-5">
-            <div className="text-xs text-muted-foreground">Reports submitted</div>
+            <div className="text-xs text-muted-foreground">{t('profile.reports_submitted', 'Reports submitted')}</div>
             <div className="mt-1 text-2xl font-extrabold text-primary">{myCount}</div>
           </div>
           <div className="rounded-2xl bg-card border border-border shadow-sm px-6 py-5">
-            <div className="text-xs text-muted-foreground">Karma · Popularity</div>
+            <div className="text-xs text-muted-foreground">{t('profile.karma_popularity', 'Karma · Popularity')}</div>
             <div className="mt-1 flex items-baseline gap-2">
               <div className="text-2xl font-extrabold text-primary">{myKarma}</div>
               <span className="text-xs px-2 py-1 rounded-full bg-primary-light text-primary border border-border">{myTier}</span>
@@ -105,14 +107,14 @@ export default function ProfilePage() {
         <div className="grid gap-6 md:grid-cols-2">
           {my.length === 0 && (
             <p className="text-sm text-muted-foreground">
-              You have not submitted any reports yet.
+              {t('profile.empty', 'You have not submitted any reports yet.')}
             </p>
           )}
 
           {my.map((r) => {
             const primaryImage = r.media && r.media.length > 0 ? r.media[0] :
               'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1200&q=80'
-            const locationTitle = (r.location_text || '').split(',')[0] || 'Unknown location'
+            const locationTitle = (r.location_text || '').split(',')[0] || t('misc.unknown_location', 'Unknown location')
             const lastTimeline =
               r.timeline && r.timeline.length > 0
                 ? r.timeline[r.timeline.length - 1]
@@ -140,7 +142,7 @@ export default function ProfilePage() {
                       <p className="text-xs text-muted-foreground line-clamp-1">
                         {r.location_text}
                       </p>
-                      <p className="text-xs text-muted-foreground">Type: {r.category}</p>
+                      <p className="text-xs text-muted-foreground">{t('community.type', 'Type:')} {r.category}</p>
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       <span
@@ -164,25 +166,25 @@ export default function ProfilePage() {
                     <div className="flex items-start gap-2">
                       <Building2 className="mt-0.5 h-3.5 w-3.5 text-slate-600" />
                       <div>
-                        <div className="font-medium">Department</div>
+                        <div className="font-medium">{t('profile.department', 'Department')}</div>
                         <div className="text-muted-foreground">
-                          {r.assigned_department || 'Not assigned yet'}
+                          {r.assigned_department || t('profile.not_assigned_yet', 'Not assigned yet')}
                         </div>
                       </div>
                     </div>
                     <div className="flex items-start gap-2">
                       <BadgeCheck className="mt-0.5 h-3.5 w-3.5 text-slate-600" />
                       <div>
-                        <div className="font-medium">Officer</div>
+                        <div className="font-medium">{t('profile.officer', 'Officer')}</div>
                         <div className="text-muted-foreground">
-                          {r.assigned_officer_name || 'Unassigned'}
+                          {r.assigned_officer_name || t('profile.unassigned', 'Unassigned')}
                         </div>
                       </div>
                     </div>
                     <div className="flex items-start gap-2">
                       <Clock className="mt-0.5 h-3.5 w-3.5 text-slate-600" />
                       <div>
-                        <div className="font-medium">Reported at</div>
+                        <div className="font-medium">{t('profile.reported_at', 'Reported at')}</div>
                         <div className="text-muted-foreground">
                           {new Date(r.submitted_at).toLocaleString()}
                         </div>
@@ -191,7 +193,7 @@ export default function ProfilePage() {
                     <div className="flex items-start gap-2">
                       <User className="mt-0.5 h-3.5 w-3.5 text-slate-600" />
                       <div>
-                        <div className="font-medium">Reporter</div>
+                        <div className="font-medium">{t('profile.reporter', 'Reporter')}</div>
                         <div className="text-muted-foreground">{r.reporter.name}</div>
                       </div>
                     </div>
@@ -200,15 +202,15 @@ export default function ProfilePage() {
                   <div className="space-y-1 border-t border-border pt-3 mt-1">
                     <div className="flex items-center gap-2 text-xs font-medium text-foreground">
                       <MapPin className="h-3.5 w-3.5 text-emerald-600" />
-                      <span>Progress timeline</span>
+                      <span>{t('profile.progress_timeline', 'Progress timeline')}</span>
                     </div>
                     {lastTimeline ? (
                       <p className="text-[11px] text-muted-foreground">
-                        Last update on {new Date(lastTimeline.at).toLocaleString()} —{' '}
+                        {t('profile.last_update_on', 'Last update on')} {new Date(lastTimeline.at).toLocaleString()} —{' '}
                         <span className="font-semibold">{lastTimeline.actor}</span>: {lastTimeline.action}
                       </p>
                     ) : (
-                      <p className="text-[11px] text-muted-foreground">No timeline updates yet.</p>
+                      <p className="text-[11px] text-muted-foreground">{t('profile.no_timeline', 'No timeline updates yet.')}</p>
                     )}
                   </div>
 
@@ -220,7 +222,7 @@ export default function ProfilePage() {
                       onClick={() => nav(`/reports/${r.report_id}`)}
                     >
                       <Eye className="h-3 w-3" />
-                      <span>View details</span>
+                      <span>{t('profile.view_details', 'View details')}</span>
                     </Button>
                   </div>
                 </div>

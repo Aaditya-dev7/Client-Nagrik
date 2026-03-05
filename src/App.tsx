@@ -18,6 +18,7 @@ import FabReport from '@/components/FabReport'
 import { useEffect } from 'react'
 import { isSupabaseEnabled, subscribeReports } from '@/lib/api'
 import { loadReports } from '@/lib/storage'
+import { useLang } from '@/lib/i18n'
 
 function Protected({ children }: { children: JSX.Element }) {
   const { user } = useAuth()
@@ -27,6 +28,7 @@ function Protected({ children }: { children: JSX.Element }) {
 }
 
 export default function App() {
+  const _lang = useLang()
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <AuthProvider>

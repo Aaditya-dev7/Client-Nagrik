@@ -6,6 +6,7 @@ import { loadReports } from '@/lib/storage'
 import { isSupabaseEnabled, supabaseListReports, subscribeReports } from '@/lib/api'
 import { geocodeAddress, reverseGeocode } from '@/lib/geocoding'
 import { useNavigate } from 'react-router-dom'
+import { t, useLang } from '@/lib/i18n'
 
 
 function ClickToReport() {
@@ -22,6 +23,7 @@ function ClickToReport() {
 }
 
 export default function MapPage() {
+  const _lang = useLang()
   const [reports, setReports] = useState<Report[]>([])
   const [geoPositions, setGeoPositions] = useState<Record<string, { lat: number; lng: number }>>({})
   useEffect(() => {
@@ -73,10 +75,10 @@ export default function MapPage() {
       <MapContainer center={center} zoom={13} className="h-full rounded border">
         <ClickToReport />
         <LayersControl position="topright">
-          <LayersControl.BaseLayer checked name="Streets">
+          <LayersControl.BaseLayer checked name={t('map.layer.streets', 'Streets')}>
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           </LayersControl.BaseLayer>
-          <LayersControl.BaseLayer name="Satellite">
+          <LayersControl.BaseLayer name={t('map.layer.satellite', 'Satellite')}>
             <TileLayer
               attribution='Tiles © Esri — Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
               url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"

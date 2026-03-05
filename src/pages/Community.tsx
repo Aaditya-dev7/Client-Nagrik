@@ -7,6 +7,7 @@ import { isSupabaseEnabled, supabaseListReports, subscribeReports, supabaseListR
 import { Button } from '@/components/ui/button'
 import LoadingOverlay from '@/components/LoadingOverlay'
 import { ArrowUp, MessageCircle, Eye } from 'lucide-react'
+import { t } from '@/lib/i18n'
 
 function getPriorityClass(priority: Report['priority']) {
   switch (priority) {
@@ -87,25 +88,25 @@ export default function CommunityPage() {
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-background px-4 sm:px-6 lg:px-8 py-8">
-      <LoadingOverlay show={loading && list.length === 0} label="Loading feed…" />
+      <LoadingOverlay show={loading && list.length === 0} label={t('community.loading')} />
       <div className="mx-auto max-w-6xl">
         <div className="mb-6 flex items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-              Community Feed
+              {t('community.title')}
             </h1>
           </div>
           <Button
             className="rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary-hover"
             onClick={() => nav('/report')}
           >
-            Report Issue
+            {t('community.cta_report')}
           </Button>
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
           {sorted.length === 0 && (
-            <p className="text-sm text-muted-foreground">No reports yet. Be the first to report an issue.</p>
+            <p className="text-sm text-muted-foreground">{t('community.empty')}</p>
           )}
 
           {sorted.map((r) => {
@@ -136,7 +137,7 @@ export default function CommunityPage() {
                       <p className="text-xs text-muted-foreground line-clamp-1">
                         {r.location_text}
                       </p>
-                      <p className="text-xs text-muted-foreground">Type: {r.category}</p>
+                      <p className="text-xs text-muted-foreground">{t('community.type')} {r.category}</p>
                     </div>
                     <span
                       className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${getPriorityClass(r.priority)}`}
@@ -166,7 +167,7 @@ export default function CommunityPage() {
                         type="button"
                       >
                         <MessageCircle className="h-3 w-3" />
-                        <span>Comment</span>
+                        <span>{t('community.comment')}</span>
                       </button>
                     </div>
                     <Button
@@ -176,7 +177,7 @@ export default function CommunityPage() {
                       onClick={() => nav(`/reports/${r.report_id}`)}
                     >
                       <Eye className="h-3 w-3" />
-                      <span>View</span>
+                      <span>{t('community.view')}</span>
                     </Button>
                   </div>
                 </div>
@@ -217,7 +218,7 @@ export default function CommunityPage() {
                 })()
               }}
             >
-              {loading ? 'Loading…' : 'Load more'}
+              {loading ? t('community.loading_more') : t('community.load_more')}
             </Button>
           </div>
         )}

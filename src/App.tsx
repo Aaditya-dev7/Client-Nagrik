@@ -6,6 +6,7 @@ import Login from '@/pages/Login'
 import HomePage from '@/pages/Home'
 import ReportPage from '@/pages/Report'
 import ReportDetailPage from '@/pages/ReportDetail'
+import ReportCommentsPage from '@/pages/ReportComments'
 import CommunityPage from '@/pages/Community'
 import MapPage from '@/pages/Map'
 import ProfilePage from '@/pages/Profile'
@@ -43,6 +44,7 @@ export default function App() {
                   <Route path="/" element={<HomePage />} />
                   <Route path="/report" element={<ReportPage />} />
                   <Route path="/reports/:id" element={<ReportDetailPage />} />
+                  <Route path="/reports/:id/comments" element={<ReportCommentsPage />} />
                   <Route path="/community" element={<CommunityPage />} />
                   <Route path="/map" element={<MapPage />} />
                   <Route path="/profile" element={<ProfilePage />} />

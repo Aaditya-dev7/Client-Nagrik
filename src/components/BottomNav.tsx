@@ -1,12 +1,13 @@
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Home, Map, Users, PlusCircle, User as UserIcon } from 'lucide-react'
+import { t } from '@/lib/i18n'
 
 const items = [
-  { to: '/', label: 'Home', icon: Home },
-  { to: '/community', label: 'Feed', icon: Users },
-  { to: '/report', label: 'Report', icon: PlusCircle, emphasize: true },
-  { to: '/map', label: 'Map', icon: Map },
-  { to: '/profile', label: 'Profile', icon: UserIcon },
+  { to: '/', label: 'nav.home', fallback: 'Home', icon: Home },
+  { to: '/community', label: 'nav.community', fallback: 'Feed', icon: Users },
+  { to: '/report', label: 'report.submit', fallback: 'Report', icon: PlusCircle, emphasize: true },
+  { to: '/map', label: 'map.title', fallback: 'Map', icon: Map },
+  { to: '/profile', label: 'nav.my_reports', fallback: 'Profile', icon: UserIcon },
 ]
 
 export default function BottomNav() {
@@ -29,7 +30,7 @@ export default function BottomNav() {
                 ].join(' ')}
               >
                 <Icon className={['h-5 w-5', active ? 'text-orange-600' : 'text-slate-600'].join(' ')} />
-                <span className="mt-0.5">{label}</span>
+                <span className="mt-0.5">{t(label as any, (items as any).find((i: any) => i.to === to)?.fallback)}</span>
               </button>
             </li>
           )

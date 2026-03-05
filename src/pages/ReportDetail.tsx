@@ -64,6 +64,17 @@ export default function ReportDetailPage() {
     }
   }, [id])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (window.location.hash !== '#comments') return
+    const id = window.setTimeout(() => {
+      try {
+        document.getElementById('comments')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      } catch {}
+    }, 250)
+    return () => window.clearTimeout(id)
+  }, [loading, report])
+
   if (loading) {
     return (
       <div className="relative min-h-[calc(100vh-4rem)]">
@@ -283,6 +294,7 @@ export default function ReportDetailPage() {
                 </div>
               </section>
             )}
+
           </div>
         </article>
       </div>

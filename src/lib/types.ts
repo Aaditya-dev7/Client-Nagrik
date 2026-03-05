@@ -1,5 +1,7 @@
 export type Reporter = { name: string; phone: string | null; anonymous: boolean }
 export type TimelineItem = { actor: string; action: string; at: string }
+export type Comment = { id: string; report_id: string; author: string; message: string; at: string }
+export type CommentLike = { id: string; comment_id: string; user_id: string; user_name: string; at: string }
 export type Report = {
   report_id: string
   category: string

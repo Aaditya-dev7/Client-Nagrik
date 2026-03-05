@@ -165,6 +165,7 @@ export default function CommunityPage() {
                       <button
                         className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1 text-xs font-medium text-foreground/80 hover:bg-primary-light"
                         type="button"
+                        onClick={() => nav(`/reports/${r.report_id}/comments`)}
                       >
                         <MessageCircle className="h-3 w-3" />
                         <span>{t('community.comment')}</span>

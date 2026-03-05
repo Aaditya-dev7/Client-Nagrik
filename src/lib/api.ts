@@ -1,5 +1,5 @@
 import { getSupabase, isSupabaseEnabled } from '@/lib/supabase'
-import type { Report, TimelineItem } from '@/lib/types'
+import type { Report, TimelineItem, Comment, CommentLike } from '@/lib/types'
 
 // Map DB row to client Report
 function mapDbToReport(row: any): Report {
@@ -24,7 +24,71 @@ function mapDbToReport(row: any): Report {
     deadline: row.deadline ?? null,
     timeline: [],
   }
+}
 
+export async function supabaseListCommentLikes(reportId: string): Promise<CommentLike[]> {
+  const sb = getSupabase()
+  if (!sb) return []
+  const { data, error } = await sb.from('comment_likes')
+    .select('*')
+    .eq('report_id', reportId)
+    .order('at', { ascending: true })
+  if (error) return []
+  return (data || []).map((row: any) => ({
+    id: row.id,
+    comment_id: row.comment_id,
+    user_id: row.user_id,
+    user_name: row.user_name,
+    at: row.at,
+  }))
+}
+
+export async function supabaseToggleCommentLike(input: { reportId: string; commentId: string; userId: string; userName: string }): Promise<boolean> {
+  const sb = getSupabase()
+  if (!sb) return false
+  const { data, error } = await sb.from('comment_likes')
+    .select('id')
+    .eq('comment_id', input.commentId)
+    .eq('user_id', input.userId)
+    .limit(1)
+  if (error) return false
+  if (data && data.length > 0) {
+    const id = data[0].id
+    const del = await sb.from('comment_likes').delete().eq('id', id)
+    return !del.error
+  }
+  const row: any = {
+    id: `cl-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    report_id: input.reportId,
+    comment_id: input.commentId,
+    user_id: input.userId,
+    user_name: input.userName,
+    at: new Date().toISOString(),
+  }
+  const ins = await sb.from('comment_likes').insert(row)
+  return !ins.error
+}
+
+export async function supabaseListComments(reportId: string): Promise<Comment[]> {
+  const sb = getSupabase()
+  if (!sb) return []
+  const { data, error } = await sb.from('report_comments').select('*').eq('report_id', reportId).order('at', { ascending: true })
+  if (error) return []
+  return (data || []).map((row: any) => ({
+    id: row.id,
+    report_id: row.report_id,
+    author: row.author,
+    message: row.message,
+    at: row.at,
+  }))
+}
+
+export async function supabaseInsertComment(input: { reportId: string; author: string; message: string; authorProfile?: string | null }): Promise<boolean> {
+  const sb = getSupabase()
+  if (!sb) return false
+  const row: any = { id: `c-${Date.now()}-${Math.random().toString(16).slice(2)}`, report_id: input.reportId, author: input.author, message: input.message, at: new Date().toISOString() }
+  const { error } = await sb.from('report_comments').insert(row)
+  return !error
 }
 
 export async function supabaseDeleteReport(id: string): Promise<boolean> {

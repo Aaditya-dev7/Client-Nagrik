@@ -19,7 +19,12 @@ export function getSupabase(): SupabaseClient | null {
   }
 
   if (!client) {
-    client = createClient(url, key)
+    client = createClient(url, key, {
+      auth: {
+        // Prevent conflicts when citizen + admin/officer apps are open in the same browser
+        storageKey: 'gov_nagrik_citizen_auth',
+      },
+    })
   }
 
   return client

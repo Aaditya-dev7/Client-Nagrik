@@ -38,8 +38,8 @@ export default function ProfilePage() {
   const nav = useNavigate()
   const [loading, setLoading] = useState(true)
 
-  const handleLogout = () => {
-    logout()
+  const handleLogout = async () => {
+    await logout()
     nav('/login')
   }
 
@@ -91,6 +91,28 @@ export default function ProfilePage() {
     <div className="relative min-h-[calc(100vh-4rem)] bg-background px-4 sm:px-6 lg:px-8 py-6">
       <LoadingOverlay show={loading && list.length === 0} label={t('profile.loading', 'Loading your reports…')} />
       <div className="mx-auto max-w-6xl">
+        {/* Top Bar with User Info and Logout */}
+        <div className="flex items-center justify-between mb-6 p-4 rounded-2xl bg-card border border-border shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-orange-400 flex items-center justify-center text-white text-lg font-bold">
+              {user?.name?.charAt(0)?.toUpperCase() || 'C'}
+            </div>
+            <div>
+              <p className="font-semibold text-foreground">{user?.name || 'Citizen'}</p>
+              <p className="text-xs text-muted-foreground">{user?.email || 'citizen@example.com'}</p>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleLogout}
+            className="flex items-center gap-2 text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
+          >
+            <LogOut className="h-4 w-4" />
+            <span className="hidden sm:inline">{t('auth.logout', 'Logout')}</span>
+          </Button>
+        </div>
+
         {/* Profile Header - Circular Photo, Name, Stats */}
         <div className="flex flex-col items-center mb-8">
           {/* Circular Profile Photo */}

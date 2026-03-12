@@ -3,10 +3,10 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Report } from '@/lib/types'
 import { loadReports, saveReports } from '@/lib/storage'
 import { isSupabaseEnabled } from '@/lib/supabase'
-import { supabaseGetReportById, supabaseListTimelines, subscribeReports, supabaseListReportMedia, supabaseDeleteReport } from '@/lib/api'
+import { supabaseGetReportById, supabaseListTimelines, subscribeReports, supabaseListReportMedia } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import LoadingOverlay from '@/components/LoadingOverlay'
-import { ArrowLeft, MapPin, Flag, Clock, User, AlertTriangle, Building2, Phone, Mail } from 'lucide-react'
+import { ArrowLeft, MapPin, Flag, Clock, User, AlertTriangle, Building2, Phone, Mail, FileText, X, ExternalLink } from 'lucide-react'
 import { t, useLang } from '@/lib/i18n'
 
 export default function ReportDetailPage() {
@@ -15,7 +15,7 @@ export default function ReportDetailPage() {
   const nav = useNavigate()
   const [report, setReport] = useState<Report | null>(null)
   const [loading, setLoading] = useState(true)
-  const [deleting, setDeleting] = useState(false)
+  const [showProof, setShowProof] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -129,23 +129,6 @@ export default function ReportDetailPage() {
     return a
   })()
 
-  const canDelete = report.status === 'Resolved'
-
-  async function handleDelete() {
-    if (!report) return
-    if (!canDelete) return
-    setDeleting(true)
-    try {
-      const id = report.report_id
-      const ok = isSupabaseEnabled() ? await supabaseDeleteReport(id) : true
-      const list = loadReports().filter(r => r.report_id !== id)
-      saveReports(list)
-      nav(-1)
-    } catch {
-      setDeleting(false)
-    }
-  }
-
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-background py-8 px-4 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-3xl space-y-6">
@@ -175,11 +158,6 @@ export default function ReportDetailPage() {
                 <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs font-semibold text-foreground/80">
                   {t('report_detail.priority', 'Priority')}: {report.priority}
                 </span>
-                {canDelete && (
-                  <Button variant="destructive" className="ml-auto" onClick={handleDelete} disabled={deleting}>
-                    {deleting ? t('common.deleting', 'Deleting…') : t('report_detail.delete', 'Delete report')}
-                  </Button>
-                )}
               </div>
             </header>
 
@@ -307,8 +285,92 @@ export default function ReportDetailPage() {
               </section>
             )}
 
+            {/* Show Proof Button for Resolved Reports */}
+            {report.status === 'Resolved' && report.resolution_documents && report.resolution_documents.length > 0 && (
+              <section className="mt-4">
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => setShowProof(true)}
+                >
+                  <FileText className="h-4 w-4" />
+                  Show Proof ({report.resolution_documents.length} document{report.resolution_documents.length > 1 ? 's' : ''})
+                </Button>
+              </section>
+            )}
+
           </div>
         </article>
+
+        {/* Proof Documents Modal */}
+        {showProof && report.resolution_documents && (
+          <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+            <div className="bg-card rounded-xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col">
+              <div className="flex items-center justify-between p-4 border-b border-border">
+                <h3 className="text-lg font-semibold">Resolution Documents</h3>
+                <button
+                  onClick={() => setShowProof(false)}
+                  className="rounded-full p-1 hover:bg-muted"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto p-4">
+                {report.resolution_note && (
+                  <div className="mb-4 p-3 bg-muted/50 rounded-lg">
+                    <div className="text-xs font-medium text-muted-foreground mb-1">Resolution Note:</div>
+                    <div className="text-sm text-foreground">{report.resolution_note}</div>
+                  </div>
+                )}
+                
+                <div className="space-y-3">
+                  {report.resolution_documents.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="flex items-center justify-between p-3 rounded-lg border border-border bg-background hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${
+                          doc.type === 'pdf' ? 'bg-red-100 text-red-600' :
+                          doc.type === 'image' ? 'bg-blue-100 text-blue-600' :
+                          'bg-gray-100 text-gray-600'
+                        }`}>
+                          <FileText className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-foreground">{doc.name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            Uploaded by {doc.uploaded_by} • {new Date(doc.uploaded_at).toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+                      <a
+                        href={doc.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        View
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              <div className="p-4 border-t border-border">
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setShowProof(false)}
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

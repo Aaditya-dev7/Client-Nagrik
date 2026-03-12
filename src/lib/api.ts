@@ -1,6 +1,134 @@
 import { getSupabase, isSupabaseEnabled } from '@/lib/supabase'
 import type { Report, TimelineItem, Comment, CommentLike, Notification } from '@/lib/types'
 
+// Normalize text for comparison
+function normalizeText(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+// Calculate similarity between two strings (0-1)
+function textSimilarity(a: string, b: string): number {
+  const normA = normalizeText(a)
+  const normB = normalizeText(b)
+  if (!normA || !normB) return 0
+  
+  const wordsA = normA.split(' ').filter(w => w.length > 2) // Ignore short words
+  const wordsB = normB.split(' ').filter(w => w.length > 2)
+  
+  if (wordsA.length === 0 || wordsB.length === 0) return 0
+  
+  // Check if one contains the other
+  if (normA.includes(normB) || normB.includes(normA)) return 0.95
+  
+  // Word overlap check
+  const setA = new Set(wordsA)
+  const setB = new Set(wordsB)
+  const intersection = [...setA].filter(w => setB.has(w)).length
+  const union = Math.max(setA.size, setB.size)
+  
+  const similarity = union > 0 ? intersection / union : 0
+  console.log('Text similarity:', { 
+    wordsA: wordsA.slice(0, 5), 
+    wordsB: wordsB.slice(0, 5), 
+    intersection, 
+    union, 
+    similarity 
+  })
+  
+  return similarity
+}
+
+// Check for duplicate reports
+export async function checkDuplicateReport(
+  description: string,
+  category: string,
+  locationText: string,
+  lat?: number | null,
+  lng?: number | null
+): Promise<{ isDuplicate: boolean; existingReport?: Report; similarity?: number }> {
+  const sb = getSupabase()
+  
+  // If Supabase is enabled, check database
+  if (sb) {
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    const { data, error } = await sb
+      .from('reports')
+      .select('*')
+      .eq('category', category)
+      .gte('submitted_at', oneDayAgo)
+      .order('submitted_at', { ascending: false })
+      .limit(50)
+    
+    console.log('Duplicate check - found reports:', data?.length, 'error:', error)
+    
+    if (error || !data || data.length === 0) return { isDuplicate: false }
+    
+    for (const row of data) {
+      const existingReport = mapDbToReport(row)
+      const similarity = textSimilarity(description, existingReport.description)
+      console.log('Comparing with:', existingReport.description?.slice(0, 50), 'similarity:', similarity)
+      
+      // Check if similar enough (50%+ similarity - lowered threshold)
+      if (similarity >= 0.5) {
+        console.log('Found potential duplicate!')
+        // Also check location proximity if coordinates available
+        if (lat && lng && existingReport.lat && existingReport.lng) {
+          const distance = Math.sqrt(
+            Math.pow(lat - existingReport.lat, 2) + 
+            Math.pow(lng - existingReport.lng, 2)
+          )
+          // If within ~5km (0.05 degrees roughly)
+          if (distance < 0.05) {
+            console.log('Location match, distance:', distance)
+            return { isDuplicate: true, existingReport, similarity }
+          }
+        } else {
+          // No coordinates, check location text similarity
+          if (locationText && existingReport.location_text) {
+            const locSimilarity = textSimilarity(locationText, existingReport.location_text)
+            if (locSimilarity >= 0.4) {
+              console.log('Location text match:', locSimilarity)
+              return { isDuplicate: true, existingReport, similarity }
+            }
+          }
+          // Just description match is enough
+          return { isDuplicate: true, existingReport, similarity }
+        }
+      }
+    }
+    
+    return { isDuplicate: false }
+  }
+  
+  // Check local storage
+  try {
+    const raw = localStorage.getItem('cc:reports')
+    if (!raw) return { isDuplicate: false }
+    const reports: Report[] = JSON.parse(raw)
+    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000
+    
+    console.log('Checking local reports:', reports.length)
+    
+    for (const report of reports) {
+      if (report.category !== category) continue
+      const submittedTime = new Date(report.submitted_at).getTime()
+      if (submittedTime < oneDayAgo) continue
+      
+      const similarity = textSimilarity(description, report.description)
+      console.log('Local similarity:', similarity, 'with:', report.description?.slice(0, 50))
+      if (similarity >= 0.5) {
+        return { isDuplicate: true, existingReport: report, similarity }
+      }
+    }
+  } catch {}
+  
+  return { isDuplicate: false }
+}
+
 // Map DB row to client Report
 function mapDbToReport(row: any): Report {
   return {
@@ -26,6 +154,8 @@ function mapDbToReport(row: any): Report {
     deadline: row.deadline ?? null,
     overdue_at: row.overdue_at ?? null,
     timeline: [],
+    resolution_documents: row.resolution_documents ?? undefined,
+    resolution_note: row.resolution_note ?? null,
   }
 }
 
@@ -87,10 +217,17 @@ export async function supabaseListCommentLikes(reportId: string): Promise<Commen
 export async function supabaseToggleCommentLike(input: { reportId: string; commentId: string; userId: string; userName: string }): Promise<boolean> {
   const sb = getSupabase()
   if (!sb) return false
+
+  const { data: uData, error: uErr } = await sb.auth.getUser()
+  const authUser = uData?.user
+  if (uErr || !authUser) return false
+  const effectiveUserId = authUser.id
+  const effectiveUserName = (authUser.user_metadata as any)?.full_name || input.userName
+
   const { data, error } = await sb.from('comment_likes')
     .select('id')
     .eq('comment_id', input.commentId)
-    .eq('user_id', input.userId)
+    .eq('user_id', effectiveUserId)
     .limit(1)
   if (error) return false
   if (data && data.length > 0) {
@@ -102,9 +239,10 @@ export async function supabaseToggleCommentLike(input: { reportId: string; comme
     id: `cl-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     report_id: input.reportId,
     comment_id: input.commentId,
-    user_id: input.userId,
-    user_name: input.userName,
+    user_id: effectiveUserId,
+    user_name: effectiveUserName,
     at: new Date().toISOString(),
+    created_by: effectiveUserId,
   }
   const ins = await sb.from('comment_likes').insert(row)
   return !ins.error
@@ -127,7 +265,19 @@ export async function supabaseListComments(reportId: string): Promise<Comment[]>
 export async function supabaseInsertComment(input: { reportId: string; author: string; message: string; authorProfile?: string | null }): Promise<boolean> {
   const sb = getSupabase()
   if (!sb) return false
-  const row: any = { id: `c-${Date.now()}-${Math.random().toString(16).slice(2)}`, report_id: input.reportId, author: input.author, message: input.message, at: new Date().toISOString() }
+
+  const { data: uData, error: uErr } = await sb.auth.getUser()
+  const authUser = uData?.user
+  if (uErr || !authUser) return false
+
+  const row: any = {
+    id: `c-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    report_id: input.reportId,
+    author: input.author,
+    message: input.message,
+    at: new Date().toISOString(),
+    created_by: authUser.id,
+  }
   const { error } = await sb.from('report_comments').insert(row)
   return !error
 }
@@ -174,6 +324,11 @@ export async function supabaseListReports(limit?: number, offset?: number): Prom
 export async function supabaseInsertReport(r: Report): Promise<boolean> {
   const sb = getSupabase()
   if (!sb) return false
+
+  const { data: uData, error: uErr } = await sb.auth.getUser()
+  const authUser = uData?.user
+  if (uErr || !authUser) return false
+
   const row = {
     id: r.report_id,
     category: r.category,
@@ -194,6 +349,7 @@ export async function supabaseInsertReport(r: Report): Promise<boolean> {
     assigned_officer_id: r.assigned_officer_id,
     assigned_officer_name: r.assigned_officer_name,
     deadline: r.deadline,
+    created_by: authUser.id,
   }
   const { error } = await sb.from('reports').insert(row)
   if (error) return false

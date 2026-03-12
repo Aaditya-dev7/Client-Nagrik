@@ -30,8 +30,9 @@ export default function ReportCommentsPage() {
   const [sending, setSending] = useState(false)
   const [aiValidating, setAiValidating] = useState(false)
   const [aiOk, setAiOk] = useState(true)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
-  // Local bad word filter
+  // Local bad word filter with whole-word matching
   const BAD_WORDS = [
     'idiot', 'stupid', 'bloody', 'abuse',
     'harami', 'nalayak', 'chutiya', 'madarchod',
@@ -55,52 +56,35 @@ export default function ReportCommentsPage() {
 
   const containsBadWords = (txt: string): boolean => {
     const lower = txt.toLowerCase()
-    return BAD_WORDS.some(word => lower.includes(word))
+    // Use word boundary matching to avoid false positives
+    return BAD_WORDS.some(word => {
+      const regex = new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
+      return regex.test(lower)
+    })
   }
 
   async function validateCommentWithAi(inputText: string) {
     const msg = String(inputText || '').trim()
     if (!msg) {
-      setAiOk(false)
-      return { ok: false, error: 'Message required' } as const
+      // Empty text - just return ok, the button will be disabled by !text.trim()
+      setAiOk(true)
+      setErrorMessage(null)
+      return { ok: true } as const
     }
     
     // Local bad word check
     if (containsBadWords(msg)) {
       setAiOk(false)
+      setErrorMessage('Abusive language detected. Please use respectful language.')
       return { ok: false, error: 'Abusive language detected. Please use respectful language.' } as const
     }
-    
-    if (!isSupabaseEnabled()) {
-      setAiOk(true)
-      return { ok: true } as const
-    }
-    const sb = getSupabase()
-    if (!sb) {
-      setAiOk(true)
-      return { ok: true } as const
-    }
-    setAiValidating(true)
-    try {
-      const res = await sb.functions.invoke('summarize', { body: { text: msg } })
-      const data = (res as any)?.data as any
-      const ok = Boolean(data?.ok)
-      const status = typeof data?.status === 'string' ? data.status : null
-      const err = typeof data?.error === 'string' ? data.error : null
-      const accepted = ok && (!status || status === 'accepted')
-      if (!accepted) {
-        setAiOk(false)
-        return { ok: false, error: err || 'Message contains disallowed content.' } as const
-      }
-      setAiOk(true)
-      return { ok: true } as const
-    } catch {
-      // Local bad word check already done above
-      setAiOk(true)
-      return { ok: true } as const
-    } finally {
-      setAiValidating(false)
-    }
+
+    // NOTE: The app previously used the 'summarize' edge function for moderation,
+    // but that function is a summarizer (not a content filter) and caused false rejections.
+    // We accept comments as long as the local bad-word filter passes.
+    setAiOk(true)
+    setErrorMessage(null)
+    return { ok: true } as const
   }
 
   useEffect(() => {
@@ -333,6 +317,12 @@ export default function ReportCommentsPage() {
             </div>
 
             <div className="border-t border-border p-3 bg-card">
+              {/* Show error message for abusive language */}
+              {errorMessage && (
+                <div className="mb-2 rounded-lg bg-destructive/10 border border-destructive/30 px-3 py-2 text-xs text-destructive">
+                  {errorMessage}
+                </div>
+              )}
               <div className="flex items-end gap-2">
                 <textarea
                   value={text}

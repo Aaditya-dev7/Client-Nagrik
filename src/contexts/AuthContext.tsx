@@ -1,53 +1,113 @@
-import React, { createContext, useContext, useState } from 'react'
+import React, { createContext, useContext, useEffect, useState } from 'react'
+import { getSupabase } from '@/lib/supabase'
 
-type User = { id: string; name: string; email: string }
+type User = { id: string; name: string; email: string; phone?: string }
 
 type AuthContextType = {
   user: User | null
-  login: (email: string, password: string) => Promise<void>
-  register: (name: string, email: string, password: string) => Promise<void>
-  logout: () => void
+  login: (email: string, password: string, keepMeSignedIn?: boolean) => Promise<void>
+  register: (name: string, email: string, password: string, phone?: string) => Promise<void>
+  logout: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-function uid() { return Math.random().toString(36).slice(2, 10) }
+function mapSupabaseUser(u: any): User {
+  const md = (u?.user_metadata || {}) as any
+  return {
+    id: String(u?.id || ''),
+    email: String(u?.email || ''),
+    name: String(md?.full_name || md?.name || (u?.email ? String(u.email).split('@')[0] : 'Citizen')),
+    phone: typeof md?.phone === 'string' ? md.phone : undefined,
+  }
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => {
-    // Hydrate auth state synchronously so route guards don't briefly see user as null on page refresh.
-    try {
-      if (typeof window === 'undefined') return null
-      const raw = localStorage.getItem('cc:user')
-      return raw ? (JSON.parse(raw) as User) : null
-    } catch {
-      return null
+  const [user, setUser] = useState<User | null>(null)
+
+  useEffect(() => {
+    const sb = getSupabase()
+    if (!sb) return
+
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { data } = await sb.auth.getSession()
+        const u = data?.session?.user
+        if (!cancelled) setUser(u ? mapSupabaseUser(u) : null)
+      } catch {
+        if (!cancelled) setUser(null)
+      }
+    })()
+
+    const { data: sub } = sb.auth.onAuthStateChange((_event, session) => {
+      const u = session?.user || null
+      setUser(u ? mapSupabaseUser(u) : null)
+    })
+
+    return () => {
+      cancelled = true
+      try { sub?.subscription?.unsubscribe() } catch {}
     }
-  })
+  }, [])
 
-  const login = async (email: string, _password: string) => {
-    const raw = localStorage.getItem('cc:users')
-    const users = raw ? (JSON.parse(raw) as User[]) : []
-    const found = users.find(u => u.email.toLowerCase() === email.toLowerCase())
-    if (!found) throw new Error('Account not found. Please register.')
-    setUser(found)
-    localStorage.setItem('cc:user', JSON.stringify(found))
+  const login = async (email: string, password: string, keepMeSignedIn: boolean = true) => {
+    const sb = getSupabase()
+    if (!sb) throw new Error('Supabase is not configured')
+    
+    // If keepMeSignedIn is false, set session to expire in 1 hour (session-only)
+    // If true, use default persistence (30 days or refresh token rotation)
+    const { error } = await sb.auth.signInWithPassword({ 
+      email, 
+      password,
+      options: {
+        // When keepMeSignedIn is false, the session will be cleared when browser closes
+        // We store this preference in sessionStorage to handle cleanup
+      }
+    })
+    
+    if (error) throw new Error(error.message || 'Login failed')
+    
+    // Store session preference
+    if (!keepMeSignedIn) {
+      try {
+        sessionStorage.setItem('nagrikGPT_session_only', 'true')
+      } catch {}
+    } else {
+      try {
+        sessionStorage.removeItem('nagrikGPT_session_only')
+      } catch {}
+    }
   }
 
-  const register = async (name: string, email: string, _password: string) => {
-    const raw = localStorage.getItem('cc:users')
-    const users = raw ? (JSON.parse(raw) as User[]) : []
-    if (users.some(u => u.email.toLowerCase() === email.toLowerCase())) throw new Error('Email already exists')
-    const newUser: User = { id: uid(), name, email }
-    users.push(newUser)
-    localStorage.setItem('cc:users', JSON.stringify(users))
-    setUser(newUser)
-    localStorage.setItem('cc:user', JSON.stringify(newUser))
+  const register = async (name: string, email: string, password: string, phone?: string) => {
+    const sb = getSupabase()
+    if (!sb) throw new Error('Supabase is not configured')
+    const { error } = await sb.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: name,
+          phone: phone || null,
+        }
+      }
+    })
+    if (error) throw new Error(error.message || 'Registration failed')
   }
 
-  const logout = () => {
+  const logout = async () => {
+    const sb = getSupabase()
+    if (!sb) {
+      setUser(null)
+      return
+    }
+    await sb.auth.signOut()
     setUser(null)
-    localStorage.removeItem('cc:user')
+    // Clear session preference
+    try {
+      sessionStorage.removeItem('nagrikGPT_session_only')
+    } catch {}
   }
 
   return (

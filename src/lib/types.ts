@@ -2,6 +2,14 @@ export type Reporter = { name: string; phone: string | null; anonymous: boolean 
 export type TimelineItem = { actor: string; action: string; at: string }
 export type Comment = { id: string; report_id: string; author: string; message: string; at: string }
 export type CommentLike = { id: string; comment_id: string; user_id: string; user_name: string; at: string }
+export type ResolutionDocument = {
+  id: string
+  name: string
+  url: string
+  type: 'pdf' | 'image' | 'document'
+  uploaded_at: string
+  uploaded_by: string
+}
 export type Notification = {
   id: string
   message: string
@@ -35,4 +43,6 @@ export type Report = {
   assigned_officer_phone?: string | null
   assigned_officer_email?: string | null
   timeline: TimelineItem[]
+  resolution_documents?: ResolutionDocument[]
+  resolution_note?: string | null
 }

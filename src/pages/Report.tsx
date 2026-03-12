@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { geocodeAddress, isCoordinateInIndia, reverseGeocode } from '@/lib/geocoding'
 import { Report } from '@/lib/types'
 import { loadReports, saveReports } from '@/lib/storage'
-import { isSupabaseEnabled, supabaseInsertReport, supabaseUploadReportPhoto } from '@/lib/api'
+import { isSupabaseEnabled, supabaseInsertReport, supabaseUploadReportPhoto, checkDuplicateReport } from '@/lib/api'
 import { getSupabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Select as UISelect } from '@/components/ui/select'
 import { Alert } from '@/components/ui/alert'
-import { AlertTriangle, Flag, MapPin, FileText, Image as ImageIcon, Clock as ClockIcon, Info, Mic } from 'lucide-react'
+import { AlertTriangle, Flag, MapPin, FileText, Image as ImageIcon, Clock as ClockIcon, Info, Mic, Camera } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { validateImageMatchesDescription } from '@/lib/ai'
 import { t, useLang } from '@/lib/i18n'
@@ -78,6 +78,13 @@ export default function ReportPage() {
   const [aiOk, setAiOk] = useState(true)
   const [aiError, setAiError] = useState<string | null>(null)
   const [aiScore, setAiScore] = useState<number | null>(null)
+  const [duplicateReport, setDuplicateReport] = useState<Report | null>(null)
+
+  // Camera capture state
+  const [showCamera, setShowCamera] = useState(false)
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null)
+  const videoRef = React.useRef<HTMLVideoElement | null>(null)
+  const canvasRef = React.useRef<HTMLCanvasElement | null>(null)
 
   // Local score calculation based on all form fields
   const localScore = React.useMemo(() => {
@@ -146,7 +153,11 @@ export default function ReportPage() {
 
   const containsBadWords = (text: string): boolean => {
     const lower = text.toLowerCase()
-    return BAD_WORDS.some(word => lower.includes(word))
+    // Use word boundary matching to avoid false positives (e.g., 'class' matching 'ass')
+    return BAD_WORDS.some(word => {
+      const regex = new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
+      return regex.test(lower)
+    })
   }
 
   const validateTextWithAi = React.useCallback(async (inputText: string) => {
@@ -185,29 +196,44 @@ export default function ReportPage() {
       console.log('Summarize response:', res)
       const data = (res as any)?.data as any
       console.log('Data:', data)
-      const ok = Boolean(data?.ok)
-      const status = typeof data?.status === 'string' ? data.status : null
-      const error = typeof data?.error === 'string' ? data.error : null
-      const score = typeof data?.report_score === 'number' ? data.report_score : null
-      console.log('Score from backend:', score)
-      setAiScore(typeof score === 'number' ? score : null)
-      const scoreOk = typeof score === 'number' ? score >= 50 : true
-      const accepted = ok && (!status || status === 'accepted') && scoreOk
-      if (!accepted) {
-        const msg = error || (!scoreOk
-          ? t('report.err.score50', 'Report score must be 50+ to submit. Please add more details.')
-          : (status === 'flagged'
-            ? t('report.err.flagged', 'Your report looks suspicious. Please add more details and try again.')
-            : t('report.err.invalid_text', 'Invalid complaint text.')))
-        setAiOk(false)
-        setAiError(msg)
-        return { ok: false, error: msg } as const
+      
+      // If backend returns data, process it
+      if (data) {
+        const ok = Boolean(data?.ok)
+        const status = typeof data?.status === 'string' ? data.status : null
+        const error = typeof data?.error === 'string' ? data.error : null
+        const score = typeof data?.report_score === 'number' ? data.report_score : null
+        console.log('Score from backend:', score)
+        setAiScore(typeof score === 'number' ? score : null)
+        
+        // Only reject if explicitly flagged or error
+        if (status === 'flagged' && error) {
+          setAiOk(false)
+          setAiError(error)
+          return { ok: false, error } as const
+        }
+        
+        // If ok is true or no explicit rejection, accept
+        if (ok || !status || status === 'accepted') {
+          setAiOk(true)
+          setAiError(null)
+          return { ok: true } as const
+        }
+        
+        // Default: accept if no clear rejection
+        setAiOk(true)
+        setAiError(null)
+        return { ok: true } as const
       }
+      
+      // If no data returned, accept (don't block submission)
       setAiOk(true)
       setAiError(null)
+      setAiScore(null)
       return { ok: true } as const
-    } catch {
-      // Even if backend fails, check local bad words (already done above)
+    } catch (err) {
+      // If backend fails, still allow submission (local bad word check already done)
+      console.warn('Summarize function error:', err)
       setAiOk(true)
       setAiError(null)
       setAiScore(null)
@@ -476,6 +502,18 @@ export default function ReportPage() {
       return
     }
 
+    // Check for duplicate reports
+    console.log('Checking for duplicates...', { description: description.slice(0, 50), category, locationText })
+    const duplicateCheck = await checkDuplicateReport(description, category, locationText, pickedLat, pickedLng)
+    console.log('Duplicate check result:', duplicateCheck)
+    if (duplicateCheck.isDuplicate && duplicateCheck.existingReport) {
+      setDuplicateReport(duplicateCheck.existingReport)
+      setSubmitting(false)
+      return
+    }
+    
+    setDuplicateReport(null)
+
     setSubmitting(true)
 
     try {
@@ -617,6 +655,69 @@ export default function ReportPage() {
     })
   }
 
+  // Camera capture functions
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+      })
+      setCameraStream(stream)
+      setShowCamera(true)
+      // Attach stream to video element
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream
+          videoRef.current.play()
+        }
+      }, 100)
+    } catch (error) {
+      console.error('Camera access error:', error)
+      alert(t('report.camera_error', 'Could not access camera. Please check permissions or use file upload instead.'))
+    }
+  }
+
+  const capturePhoto = () => {
+    if (!videoRef.current || !canvasRef.current) return
+    
+    const video = videoRef.current
+    const canvas = canvasRef.current
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    // Set canvas dimensions to match video
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+
+    // Draw video frame to canvas
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+
+    // Convert canvas to blob
+    canvas.toBlob((blob) => {
+      if (!blob) return
+      
+      // Create file from blob
+      const file = new File([blob], `camera-capture-${Date.now()}.jpg`, { type: 'image/jpeg' })
+      
+      // Add to photos array
+      setPhotos(prev => [...prev, file])
+      
+      // Create preview
+      const previewUrl = URL.createObjectURL(blob)
+      setPhotoPreviews(prev => [...prev, previewUrl])
+      
+      // Close camera
+      stopCamera()
+    }, 'image/jpeg', 0.9)
+  }
+
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop())
+      setCameraStream(null)
+    }
+    setShowCamera(false)
+  }
+
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-background/80 py-8 px-4 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-3xl space-y-4">
@@ -663,9 +764,71 @@ export default function ReportPage() {
           </div>
 
           <div className="px-6 py-6 sm:py-8">
-            {formError && (
+            {formError && !duplicateReport && (
               <div className="mb-4">
                 <Alert variant="error">{formError}</Alert>
+              </div>
+            )}
+            {duplicateReport && (
+              <div className="mb-4">
+                <div className="rounded-lg border-2 border-amber-500/50 bg-amber-50 dark:bg-amber-950/30 p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-amber-800 dark:text-amber-200 mb-2">
+                        {t('report.duplicate_title', 'Duplicate Report Detected')}
+                      </h3>
+                      <p className="text-sm text-amber-700 dark:text-amber-300 mb-3">
+                        {t('report.duplicate_desc', 'A similar report already exists in the community. Please check the existing report or add more details to make your report unique.')}
+                      </p>
+                      <div className="bg-white/50 dark:bg-black/20 rounded-md p-3 mb-3">
+                        <p className="text-xs text-muted-foreground mb-1">
+                          {t('report.existing_report', 'Existing Report')}:
+                        </p>
+                        <p className="text-sm font-medium text-foreground">
+                          {duplicateReport.description?.slice(0, 150)}
+                          {duplicateReport.description && duplicateReport.description.length > 150 ? '...' : ''}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          {t('report.submitted_at', 'Submitted')}: {new Date(duplicateReport.submitted_at).toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            nav(`/reports/${duplicateReport.report_id}`)
+                          }}
+                          className="border-amber-500 text-amber-700 hover:bg-amber-100 dark:border-amber-400 dark:text-amber-300 dark:hover:bg-amber-900"
+                        >
+                          {t('report.view_existing', 'View Existing Report')}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            nav('/community')
+                          }}
+                          className="text-foreground/70"
+                        >
+                          {t('report.go_community', 'Go to Community')}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setDuplicateReport(null)}
+                          className="text-muted-foreground"
+                        >
+                          {t('report.dismiss', 'Dismiss')}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
             {success && (
@@ -893,14 +1056,25 @@ export default function ReportPage() {
                     <ImageIcon className="h-4 w-4 text-slate-700" aria-hidden="true" />
                     {t('report.photo', 'Attach photos')} <span className="text-xs text-muted-foreground">({t('report.optional', 'optional')})</span>
                   </Label>
-                  <Input
-                    id={photoId}
-                    className="mt-1 cursor-pointer"
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={onPhotoChange}
-                  />
+                  <div className="mt-1 flex gap-2">
+                    <Input
+                      id={photoId}
+                      className="flex-1 cursor-pointer"
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={onPhotoChange}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="shrink-0 px-3"
+                      onClick={startCamera}
+                      title={t('report.capture_photo', 'Capture photo from camera')}
+                    >
+                      <Camera className="h-4 w-4" />
+                    </Button>
+                  </div>
                   {photoPreviews.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-2">
                       {photoPreviews.map((preview, idx) => (
@@ -957,6 +1131,43 @@ export default function ReportPage() {
             </form>
           </div>
         </div>
+
+        {/* Camera Capture Modal */}
+        {showCamera && (
+          <div className="fixed inset-0 z-50 bg-black/80 flex flex-col items-center justify-center p-4">
+            <div className="bg-card rounded-lg p-4 max-w-2xl w-full">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold">{t('report.camera_title', 'Capture Photo')}</h3>
+                <Button variant="ghost" size="sm" onClick={stopCamera}>×</Button>
+              </div>
+              
+              <div className="relative bg-black rounded-lg overflow-hidden mb-4">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-auto max-h-[60vh] object-cover"
+                />
+                <canvas ref={canvasRef} className="hidden" />
+              </div>
+              
+              <div className="flex gap-2 justify-center">
+                <Button variant="outline" onClick={stopCamera}>
+                  {t('report.camera_cancel', 'Cancel')}
+                </Button>
+                <Button onClick={capturePhoto} className="gap-2">
+                  <Camera className="h-4 w-4" />
+                  {t('report.camera_capture', 'Capture')}
+                </Button>
+              </div>
+              
+              <p className="text-xs text-muted-foreground text-center mt-3">
+                {t('report.camera_tip', 'Position the issue clearly in the frame before capturing')}
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

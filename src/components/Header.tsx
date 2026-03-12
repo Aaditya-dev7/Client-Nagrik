@@ -1,22 +1,20 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import ThemeToggle from '@/components/ThemeToggle'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { Select } from '@/components/ui/select'
 import { setLang as setLangGlobal, t } from '@/lib/i18n'
 import { mapDbToNotification, supabaseListNotifications, subscribeNotifications } from '@/lib/api'
 import type { Notification } from '@/lib/types'
-import { Bell, User, FileText, LogOut, ChevronDown } from 'lucide-react'
+import { Bell } from 'lucide-react'
 
 export function Header() {
-  const { user, logout } = useAuth()
+  const { user } = useAuth()
   const loc = useLocation()
   const nav = useNavigate()
   const [lang, setLang] = useState<'en' | 'hi' | 'mr'>('en')
   const [notifOpen, setNotifOpen] = useState(false)
   const [notifications, setNotifications] = useState<Notification[]>([])
-  const [profileOpen, setProfileOpen] = useState(false)
-  const profileRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     try {
@@ -50,11 +48,12 @@ export function Header() {
     }
   }, [])
 
-  // Close profile dropdown when clicking outside
+  // Close notifications when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
-        setProfileOpen(false)
+      const target = e.target as HTMLElement
+      if (!target.closest('[role="menu"]') && !target.closest('button[aria-label="Notifications"]')) {
+        setNotifOpen(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -81,14 +80,15 @@ export function Header() {
     { to: '/', label: t('nav.home') },
     { to: '/community', label: t('nav.community') },
     { to: '/leaders', label: t('nav.leaders') },
+    ...(user ? [{ to: '/profile', label: t('nav.my_reports', 'My Reports') }] : []),
   ]
 
   return (
-    <header className="fixed left-0 right-0 z-40" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.5rem)' }}>
+    <header className="fixed left-0 right-0 z-40 top-0" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.5rem)' }}>
       <div className="max-w-6xl mx-auto px-3">
-        <div className="rounded-full border border-border bg-card/80 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/70 px-4 py-2 flex items-center justify-between transition-colors duration-300">
-          <Link to="/" className="text-lg font-extrabold tracking-tight text-primary">NagrikGPT</Link>
-        <nav className="hidden sm:flex gap-2 text-sm">
+        <div className="rounded-full border border-border/60 bg-background/95 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/85 px-4 py-2 flex items-center justify-between transition-all duration-300">
+          <Link to="/" className="text-lg font-extrabold tracking-tight text-primary hover:opacity-90 transition-opacity">NagrikGPT</Link>
+        <nav className="hidden sm:flex gap-1.5 text-sm">
           {tabs.map(t => {
             const active = loc.pathname === t.to
             return (
@@ -96,8 +96,8 @@ export function Header() {
                 key={t.to}
                 to={t.to}
                 className={[
-                  'px-3 py-1.5 rounded-full transition',
-                  active ? 'bg-primary text-primary-foreground shadow-sm' : 'text-foreground/80 hover:bg-primary-light hover:text-foreground'
+                  'px-3.5 py-2 rounded-full transition-all duration-200 font-medium',
+                  active ? 'bg-primary text-primary-foreground shadow-md' : 'text-foreground/70 hover:bg-accent hover:text-foreground'
                 ].join(' ')}
               >
                 {t.label}
@@ -105,29 +105,29 @@ export function Header() {
             )
           })}
         </nav>
-        <div className="flex items-center gap-2 sm:gap-3">
-          {/* Language selector - visible on mobile too */}
+        <div className="flex items-center gap-2">
+          {/* Language selector */}
           <Select
             value={lang}
             onChange={(e) => setLanguage(e.target.value)}
             className={[
-              'h-8 sm:h-9 rounded-full border border-border bg-background/40 text-xs sm:text-sm',
-            'px-2 sm:px-3 pr-6 sm:pr-8 text-foreground/90',
-            'hover:bg-primary-light transition-colors',
-            'focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background',
-            'appearance-none cursor-pointer',
-            'bg-[linear-gradient(45deg,transparent_50%,hsl(var(--foreground))_50%),linear-gradient(135deg,hsl(var(--foreground))_50%,transparent_50%)]',
-            'bg-[length:5px_5px,5px_5px] sm:bg-[length:6px_6px,6px_6px] bg-[position:calc(100%-10px)_50%,calc(100%-8px)_50%] sm:bg-[position:calc(100%-14px)_50%,calc(100%-10px)_50%] bg-no-repeat',
-          ].join(' ')}
-        options={[
-          { value: 'en', label: 'EN' },
-          { value: 'hi', label: 'हि' },
-          { value: 'mr', label: 'मर' },
-        ]}
-      />
+              'h-9 rounded-full border border-border bg-background/60 text-sm',
+              'px-3 pr-8 text-foreground/90 font-medium',
+              'hover:bg-accent transition-colors',
+              'focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2',
+              'appearance-none cursor-pointer',
+              'bg-[linear-gradient(45deg,transparent_50%,hsl(var(--foreground))_50%),linear-gradient(135deg,hsl(var(--foreground))_50%,transparent_50%)]',
+              'bg-[length:6px_6px,6px_6px] bg-[position:calc(100%-14px)_50%,calc(100%-10px)_50%] bg-no-repeat',
+            ].join(' ')}
+          options={[
+            { value: 'en', label: 'EN' },
+            { value: 'hi', label: 'हि' },
+            { value: 'mr', label: 'मर' },
+          ]}
+        />
           <div className="relative">
             <button
-              className="relative h-9 w-9 rounded-full border border-border bg-background/40 hover:bg-primary-light transition-colors inline-flex items-center justify-center"
+              className="relative h-9 w-9 rounded-full border border-border bg-background/60 hover:bg-accent transition-all inline-flex items-center justify-center"
               onClick={() => setNotifOpen(v => !v)}
               aria-label="Notifications"
               aria-haspopup="true"
@@ -186,45 +186,20 @@ export function Header() {
             )}
           </div>
           <ThemeToggle />
-          {/* Profile dropdown for desktop - contains My Reports and Logout */}
+          {/* Profile button - simplified, no dropdown */}
           {user ? (
-            <div className="relative" ref={profileRef}>
-              <button
-                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border bg-background/40 hover:bg-primary-light text-sm transition-colors"
-                onClick={() => setProfileOpen(v => !v)}
-                type="button"
-              >
-                <div className="h-6 w-6 rounded-full bg-gradient-to-br from-primary to-orange-400 flex items-center justify-center text-white text-xs font-bold">
-                  {user.name?.charAt(0)?.toUpperCase() || 'U'}
-                </div>
-                <span className="text-foreground/90">{user.name}</span>
-                <ChevronDown className={['h-3 w-3 transition-transform', profileOpen ? 'rotate-180' : ''].join(' ')} />
-              </button>
-              
-              {profileOpen && (
-                <div className="absolute right-0 top-full mt-2 w-48 bg-popover border rounded-lg shadow-lg z-50" role="menu">
-                  <button
-                    type="button"
-                    className="w-full flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-accent transition-colors rounded-t-lg"
-                    onClick={() => { setProfileOpen(false); nav('/profile') }}
-                  >
-                    <FileText className="h-4 w-4" />
-                    {t('nav.my_reports', 'My Reports')}
-                  </button>
-                  <div className="border-t" />
-                  <button
-                    type="button"
-                    className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-destructive hover:bg-destructive/10 transition-colors rounded-b-lg"
-                    onClick={() => { setProfileOpen(false); logout(); nav('/login') }}
-                  >
-                    <LogOut className="h-4 w-4" />
-                    {t('auth.logout', 'Logout')}
-                  </button>
-                </div>
-              )}
-            </div>
+            <button
+              className="hidden sm:inline-flex items-center gap-2 px-3 py-2 rounded-full border border-border bg-background/60 hover:bg-accent transition-all"
+              onClick={() => nav('/profile')}
+              type="button"
+            >
+              <div className="h-7 w-7 rounded-full bg-gradient-to-br from-primary to-orange-400 flex items-center justify-center text-white text-xs font-bold">
+                {user.name?.charAt(0)?.toUpperCase() || 'U'}
+              </div>
+              <span className="text-sm font-medium text-foreground/90">{user.name}</span>
+            </button>
           ) : (
-            <Link to="/login" className="hidden sm:inline-flex px-3 py-1.5 rounded-full border border-border text-foreground hover:bg-primary-light text-sm">{t('auth.login')}</Link>
+            <Link to="/login" className="hidden sm:inline-flex px-4 py-2 rounded-full border border-border bg-primary text-primary-foreground hover:opacity-90 text-sm font-medium transition-all">{t('auth.login')}</Link>
           )}
         </div>
         </div>

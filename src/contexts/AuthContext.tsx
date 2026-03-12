@@ -52,32 +52,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const login = async (email: string, password: string, keepMeSignedIn: boolean = true) => {
+    // Store session preference BEFORE auth so the Supabase client uses the correct storage.
+    if (!keepMeSignedIn) {
+      try { sessionStorage.setItem('nagrikGPT_session_only', 'true') } catch {}
+    } else {
+      try { sessionStorage.removeItem('nagrikGPT_session_only') } catch {}
+    }
+
     const sb = getSupabase()
     if (!sb) throw new Error('Supabase is not configured')
-    
-    // If keepMeSignedIn is false, set session to expire in 1 hour (session-only)
-    // If true, use default persistence (30 days or refresh token rotation)
-    const { error } = await sb.auth.signInWithPassword({ 
-      email, 
-      password,
-      options: {
-        // When keepMeSignedIn is false, the session will be cleared when browser closes
-        // We store this preference in sessionStorage to handle cleanup
-      }
-    })
-    
+
+    const { error } = await sb.auth.signInWithPassword({ email, password })
     if (error) throw new Error(error.message || 'Login failed')
-    
-    // Store session preference
-    if (!keepMeSignedIn) {
-      try {
-        sessionStorage.setItem('nagrikGPT_session_only', 'true')
-      } catch {}
-    } else {
-      try {
-        sessionStorage.removeItem('nagrikGPT_session_only')
-      } catch {}
-    }
   }
 
   const register = async (name: string, email: string, password: string, phone?: string) => {

@@ -1,6 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
 let client: SupabaseClient | null = null
+let lastStorage: 'local' | 'session' | null = null
 
 export function isSupabaseEnabled(): boolean {
   return Boolean(
@@ -19,13 +20,39 @@ export function getSupabase(): SupabaseClient | null {
   }
 
   if (!client) {
+    const sessionOnly = (() => {
+      try { return sessionStorage.getItem('nagrikGPT_session_only') === 'true' } catch { return false }
+    })()
+    const desired: 'local' | 'session' = sessionOnly ? 'session' : 'local'
+    lastStorage = desired
     client = createClient(url, key, {
       auth: {
         // Prevent conflicts when citizen + admin/officer apps are open in the same browser
         storageKey: 'gov_nagrik_citizen_auth',
+        storage: sessionOnly ? sessionStorage : localStorage,
+        persistSession: true,
+        autoRefreshToken: true,
       },
     })
   }
+
+  // If the user toggles "Keep me signed in", recreate the client with the right storage.
+  // (Supabase auth persistence is decided at client creation time.)
+  try {
+    const sessionOnly = sessionStorage.getItem('nagrikGPT_session_only') === 'true'
+    const desired: 'local' | 'session' = sessionOnly ? 'session' : 'local'
+    if (client && lastStorage && desired !== lastStorage) {
+      client = createClient(url!, key!, {
+        auth: {
+          storageKey: 'gov_nagrik_citizen_auth',
+          storage: sessionOnly ? sessionStorage : localStorage,
+          persistSession: true,
+          autoRefreshToken: true,
+        },
+      })
+      lastStorage = desired
+    }
+  } catch {}
 
   return client
 }

@@ -1,16 +1,17 @@
 import React, { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { geocodeAddress, isCoordinateInIndia } from '@/lib/geocoding'
+import { geocodeAddress, isCoordinateInIndia, reverseGeocode } from '@/lib/geocoding'
 import { Report } from '@/lib/types'
 import { loadReports, saveReports } from '@/lib/storage'
 import { isSupabaseEnabled, supabaseInsertReport, supabaseUploadReportPhoto } from '@/lib/api'
+import { getSupabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Select as UISelect } from '@/components/ui/select'
 import { Alert } from '@/components/ui/alert'
-import { AlertTriangle, Flag, MapPin, FileText, Image as ImageIcon, Clock as ClockIcon, Info } from 'lucide-react'
+import { AlertTriangle, Flag, MapPin, FileText, Image as ImageIcon, Clock as ClockIcon, Info, Mic } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { validateImageMatchesDescription } from '@/lib/ai'
 import { t, useLang } from '@/lib/i18n'
@@ -31,18 +32,368 @@ export default function ReportPage() {
   const { user } = useAuth()
   const loc = useLocation()
   const [category, setCategory] = useState('Pothole')
+  const [otherCategory, setOtherCategory] = useState('')
   const [priority, setPriority] = useState<'Low' | 'Medium' | 'High' | 'Urgent'>('Medium')
   const [locationText, setLocationText] = useState('')
   const [description, setDescription] = useState('')
   const [incidentTime, setIncidentTime] = useState('')
-  const [photo, setPhoto] = useState<File | null>(null)
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null)
+  const [photos, setPhotos] = useState<File[]>([])
+  const [photoPreviews, setPhotoPreviews] = useState<string[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [success, setSuccess] = useState('')
   const [formError, setFormError] = useState('')
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [pickedLat, setPickedLat] = useState<number | null>(null)
   const [pickedLng, setPickedLng] = useState<number | null>(null)
+
+  const [voiceEnabled, setVoiceEnabled] = useState(true)
+  const [voiceLang, setVoiceLang] = useState<'en-IN' | 'hi-IN' | 'mr-IN'>(() => {
+    const stored = localStorage.getItem('nagrikGPT_lang')
+    if (stored === 'hi') return 'hi-IN'
+    if (stored === 'mr') return 'mr-IN'
+    return 'en-IN'
+  })
+  const [voiceGender, setVoiceGender] = useState<'male' | 'female'>('female')
+  const [dictating, setDictating] = useState(false)
+  const recognitionRef = React.useRef<any>(null)
+  const audioRef = React.useRef<HTMLAudioElement | null>(null)
+  const lastPlayedKeywordRef = React.useRef<string | null>(null)
+
+  // Sync voice language with top nav language selection
+  React.useEffect(() => {
+    const syncLang = () => {
+      const stored = localStorage.getItem('nagrikGPT_lang')
+      const newLang: 'en-IN' | 'hi-IN' | 'mr-IN' = stored === 'hi' ? 'hi-IN' : stored === 'mr' ? 'mr-IN' : 'en-IN'
+      setVoiceLang(newLang)
+    }
+    window.addEventListener('storage', syncLang)
+    window.addEventListener('nagrikGPT_lang_change', syncLang)
+    return () => {
+      window.removeEventListener('storage', syncLang)
+      window.removeEventListener('nagrikGPT_lang_change', syncLang)
+    }
+  }, [])
+
+  const [aiValidating, setAiValidating] = useState(false)
+  const [aiOk, setAiOk] = useState(true)
+  const [aiError, setAiError] = useState<string | null>(null)
+  const [aiScore, setAiScore] = useState<number | null>(null)
+
+  // Local score calculation based on all form fields
+  const localScore = React.useMemo(() => {
+    let score = 0
+    
+    // Category (10 points)
+    if (category && category !== 'Select category') score += 10
+    
+    // Priority (10 points)
+    if (priority) score += 10
+    
+    // Location (20 points)
+    if (locationText.trim().length >= 3) score += 10
+    if (locationText.trim().length >= 10) score += 5
+    if (pickedLat && pickedLng) score += 5
+    
+    // Description (40 points max)
+    const words = description.trim().split(/\s+/).filter(Boolean)
+    if (words.length >= 3) score += 5
+    if (words.length >= 5) score += 5
+    if (words.length >= 8) score += 5
+    if (words.length >= 12) score += 5
+    if (words.length >= 15) score += 5
+    if (words.length >= 20) score += 5
+    if (description.includes('.')) score += 5  // Proper sentences
+    if (description.includes(',')) score += 3
+    
+    // Incident time (10 points)
+    if (incidentTime) score += 10
+    
+    // Photo (10 points)
+    if (photos.length > 0) score += 10
+    
+    return Math.min(score, 100)
+  }, [category, priority, locationText, description, incidentTime, photos.length, pickedLat, pickedLng])
+
+  // Combined score - prefer AI score if available, otherwise local
+  const displayScore = aiScore !== null ? aiScore : localScore
+
+  const validationImageUrl = React.useMemo(() => {
+    // Prefer a Supabase public URL if the user attached a photo; otherwise use local preview
+    return (photoPreviews[0] || '')
+  }, [photoPreviews])
+
+  // Local bad word filter (fallback if backend validation fails)
+  const BAD_WORDS = [
+    'idiot', 'stupid', 'bloody', 'abuse',
+    'harami', 'nalayak', 'chutiya', 'madarchod',
+    'fuck', 'fucking', 'fucked', 'fucker', 'fuckers',
+    'shit', 'shitty', 'bullshit', 'bull shit',
+    'damn', 'dammit', 'goddamn',
+    'ass', 'asshole', 'assholes',
+    'bastard', 'bastards',
+    'bitch', 'bitches', 'bitching',
+    'crap', 'crappy',
+    'dick', 'dicks', 'dickhead',
+    'piss', 'pissed', 'pissing',
+    'whore', 'whores',
+    'slut', 'sluts',
+    'cock', 'cocks',
+    'pussy', 'pussies',
+    'wanker', 'wankers',
+    'suck', 'sucks', 'sucking',
+    'mc', 'bc', 'mkc', 'maderchod', 'bhenchod', 'bhadwa', 'randi', 'randwa'
+  ]
+
+  const containsBadWords = (text: string): boolean => {
+    const lower = text.toLowerCase()
+    return BAD_WORDS.some(word => lower.includes(word))
+  }
+
+  const validateTextWithAi = React.useCallback(async (inputText: string) => {
+    const text = String(inputText || '').trim()
+    if (!text) {
+      setAiOk(false)
+      setAiError(t('report.err.description_required', 'Description is required.'))
+      setAiScore(null)
+      return { ok: false, error: t('report.err.description_required', 'Description is required.') } as const
+    }
+    
+    // Local bad word check (always run, even if backend fails)
+    if (containsBadWords(text)) {
+      setAiOk(false)
+      setAiError(t('report.err.abusive', 'Abusive language detected. Please use respectful language.'))
+      setAiScore(null)
+      return { ok: false, error: t('report.err.abusive', 'Abusive language detected. Please use respectful language.') } as const
+    }
+    
+    if (!isSupabaseEnabled()) {
+      setAiOk(true)
+      setAiError(null)
+      setAiScore(null)
+      return { ok: true } as const
+    }
+    const sb = getSupabase()
+    if (!sb) {
+      setAiOk(true)
+      setAiError(null)
+      setAiScore(null)
+      return { ok: true } as const
+    }
+    setAiValidating(true)
+    try {
+      const res = await sb.functions.invoke('summarize', { body: { text, image_url: validationImageUrl } })
+      console.log('Summarize response:', res)
+      const data = (res as any)?.data as any
+      console.log('Data:', data)
+      const ok = Boolean(data?.ok)
+      const status = typeof data?.status === 'string' ? data.status : null
+      const error = typeof data?.error === 'string' ? data.error : null
+      const score = typeof data?.report_score === 'number' ? data.report_score : null
+      console.log('Score from backend:', score)
+      setAiScore(typeof score === 'number' ? score : null)
+      const scoreOk = typeof score === 'number' ? score >= 50 : true
+      const accepted = ok && (!status || status === 'accepted') && scoreOk
+      if (!accepted) {
+        const msg = error || (!scoreOk
+          ? t('report.err.score50', 'Report score must be 50+ to submit. Please add more details.')
+          : (status === 'flagged'
+            ? t('report.err.flagged', 'Your report looks suspicious. Please add more details and try again.')
+            : t('report.err.invalid_text', 'Invalid complaint text.')))
+        setAiOk(false)
+        setAiError(msg)
+        return { ok: false, error: msg } as const
+      }
+      setAiOk(true)
+      setAiError(null)
+      return { ok: true } as const
+    } catch {
+      // Even if backend fails, check local bad words (already done above)
+      setAiOk(true)
+      setAiError(null)
+      setAiScore(null)
+      return { ok: true } as const
+    } finally {
+      setAiValidating(false)
+    }
+  }, [])
+
+  React.useEffect(() => {
+    let alive = true
+    const id = window.setTimeout(() => {
+      if (!alive) return
+      // Only validate with AI if description has content
+      if (description.trim().length >= 3) {
+        validateTextWithAi(description)
+      } else {
+        setAiScore(null)
+        setAiOk(false)
+        setAiError(null)
+      }
+    }, 450)
+    return () => { alive = false; window.clearTimeout(id) }
+  }, [description, validateTextWithAi])
+
+  const guideData = React.useMemo(() => ({
+    category: {
+      'en-IN': 'Select the type of issue, for example, road, water, or garbage.',
+      'hi-IN': 'समस्या का प्रकार चुनें, जैसे सड़क, पानी, या कचरा।',
+      'mr-IN': 'समस्येचा प्रकार निवडा, उदाहरणार्थ रस्ता, पाणी किंवा कचरा.'
+    },
+    priority: {
+      'en-IN': 'Select the priority of the issue.',
+      'hi-IN': 'समस्या की प्राथमिकता चुनें।',
+      'mr-IN': 'समस्येची प्राथमिकता निवडा.'
+    },
+    location: {
+      'en-IN': 'Enter the location or address of the issue.',
+      'hi-IN': 'समस्या का पता या स्थान यहाँ लिखें।',
+      'mr-IN': 'समस्येचा पत्ता किंवा स्थान येथे लिहा.'
+    },
+    incident_time: {
+      'en-IN': 'Enter when the incident happened, if known.',
+      'hi-IN': 'घटना का समय लिखें (यदि ज्ञात हो)।',
+      'mr-IN': 'घटनेची वेळ लिहा (माहित असल्यास).' 
+    },
+    description: {
+      'en-IN': 'Describe your issue in detail here.',
+      'hi-IN': 'अपनी समस्या का विवरण यहाँ लिखें।',
+      'mr-IN': 'इथे तुमचा इश्यू सांगा.'
+    },
+    photo: {
+      'en-IN': 'Upload a photo of the issue if available.',
+      'hi-IN': 'समस्या की फोटो अपलोड करें।',
+      'mr-IN': 'समस्येचा फोटो अपलोड करा.'
+    }
+  }), [])
+
+  // Map voiceLang to folder name
+  const voiceLangToFolder: Record<string, string> = {
+    'en-IN': 'english',
+    'hi-IN': 'hindi',
+    'mr-IN': 'marathi'
+  }
+
+  // Stop any playing audio
+  const stopAudio = React.useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.currentTime = 0
+      audioRef.current = null
+    }
+    lastPlayedKeywordRef.current = null
+  }, [])
+
+  // Play MP3 audio guide for a given keyword (category, description, image, location, priority, time, lang_confirm, other)
+  const playVoiceGuide = React.useCallback((keyword: string, force: boolean = false) => {
+    try {
+      if (!voiceEnabled) return
+      if (typeof window === 'undefined') return
+      
+      // Stop any currently playing audio
+      stopAudio()
+      
+      const folder = voiceLangToFolder[voiceLang] || 'english'
+      const gender = voiceGender || 'female'
+      // Build path: /Client-Nagrik/voice/{language}/{keyword} ({gender}).mp3
+      // Note: filename has space before parenthesis, e.g. "category (female).mp3"
+      // vite base is /Client-Nagrik/ so public assets need that prefix
+      const audioPath = `/Client-Nagrik/voice/${folder}/${keyword} (${gender}).mp3`
+      const encodedPath = encodeURI(audioPath)
+      
+      console.log('Playing voice guide:', encodedPath)
+      
+      const audio = new Audio(encodedPath)
+      audioRef.current = audio
+      lastPlayedKeywordRef.current = keyword
+      
+      audio.addEventListener('error', (e) => {
+        console.error('Audio error:', e, audio.error)
+      })
+      
+      audio.play().catch((err) => {
+        console.warn('Voice guide audio play failed:', err)
+      })
+    } catch (err) {
+      console.warn('Voice guide error:', err)
+    }
+  }, [voiceEnabled, voiceLang, voiceGender, stopAudio])
+
+  // Handle voice toggle - pause audio when disabled
+  const handleVoiceToggle = React.useCallback(() => {
+    const newEnabled = !voiceEnabled
+    setVoiceEnabled(newEnabled)
+    if (!newEnabled) {
+      stopAudio()
+    }
+  }, [voiceEnabled, stopAudio])
+
+  // Handle language change - play lang_confirm audio
+  const handleVoiceLangChange = React.useCallback((newLang: 'en-IN' | 'hi-IN' | 'mr-IN') => {
+    stopAudio()
+    setVoiceLang(newLang)
+    // Play lang_confirm after state updates
+    setTimeout(() => {
+      if (voiceEnabled) {
+        const folder = voiceLangToFolder[newLang] || 'english'
+        const gender = voiceGender || 'female'
+        const audioPath = `/Client-Nagrik/voice/${folder}/lang_confirm (${gender}).mp3`
+        const audio = new Audio(encodeURI(audioPath))
+        audioRef.current = audio
+        audio.play().catch(() => {})
+      }
+    }, 50)
+  }, [voiceEnabled, voiceGender, stopAudio])
+
+  // Handle gender change - play lang_confirm audio
+  const handleVoiceGenderChange = React.useCallback((newGender: 'male' | 'female') => {
+    stopAudio()
+    setVoiceGender(newGender)
+    // Play lang_confirm after state updates
+    setTimeout(() => {
+      if (voiceEnabled) {
+        const folder = voiceLangToFolder[voiceLang] || 'english'
+        const audioPath = `/Client-Nagrik/voice/${folder}/lang_confirm (${newGender}).mp3`
+        const audio = new Audio(encodeURI(audioPath))
+        audioRef.current = audio
+        audio.play().catch(() => {})
+      }
+    }, 50)
+  }, [voiceEnabled, voiceLang, stopAudio])
+
+  const ensureRecognition = React.useCallback(() => {
+    if (typeof window === 'undefined') return null
+    const W: any = window as any
+    const SR = W.SpeechRecognition || W.webkitSpeechRecognition
+    if (!SR) return null
+    if (!recognitionRef.current) {
+      const r = new SR()
+      r.continuous = false
+      r.interimResults = false
+      r.maxAlternatives = 1
+      recognitionRef.current = r
+    }
+    recognitionRef.current.lang = voiceLang
+    return recognitionRef.current
+  }, [voiceLang])
+
+  const startDictation = React.useCallback(() => {
+    const rec = ensureRecognition()
+    if (!rec) return
+    try {
+      setDictating(true)
+      rec.onresult = (event: any) => {
+        try {
+          const transcript = event?.results?.[0]?.[0]?.transcript || ''
+          if (transcript) setDescription((prev) => (prev ? (prev + ' ' + transcript) : transcript))
+        } catch {}
+      }
+      rec.onerror = () => { setDictating(false) }
+      rec.onend = () => { setDictating(false) }
+      rec.start()
+    } catch {
+      setDictating(false)
+    }
+  }, [ensureRecognition])
 
   React.useEffect(() => {
     try {
@@ -73,6 +424,7 @@ export default function ReportPage() {
     'Tree Falling Risk',
     'Sewage Overflow',
     'Park Maintenance',
+    'Other',
   ]
   const priorities: Array<'Low' | 'Medium' | 'High' | 'Urgent'> = ['Low', 'Medium', 'High', 'Urgent']
 
@@ -87,8 +439,23 @@ export default function ReportPage() {
     const errors: FieldErrors = {}
 
     if (!category) errors.category = t('report.err.category', 'Please select a category.')
+    if (category === 'Other' && !otherCategory.trim()) errors.category = t('report.err.category', 'Please select a category.')
     if (!priority) errors.priority = t('report.err.priority', 'Please select a priority.')
-    if (!locationText.trim()) errors.location = t('report.err.location_required', 'Location is required.')
+    
+    // Location validation - must be specific
+    if (!locationText.trim()) {
+      errors.location = t('report.err.location_required', 'Location is required.')
+    } else if (locationText.trim().length < 5) {
+      errors.location = t('report.err.location_too_short', 'Please enter a more specific location (at least 5 characters).')
+    } else if (!pickedLat && !pickedLng) {
+      // Check for generic/vague locations
+      const vagueLocations = ['india', 'mumbai', 'delhi', 'pune', 'bangalore', 'hyderabad', 'chennai', 'kolkata', 'near me', 'here', 'there', 'my area', 'my location']
+      const isVague = vagueLocations.some(loc => locationText.toLowerCase().trim() === loc)
+      if (isVague) {
+        errors.location = t('report.err.location_vague', 'Please enter a specific address or use the map to pin exact location.')
+      }
+    }
+    
     if (!description.trim()) errors.description = t('report.err.description_required', 'Description is required.')
 
     setFieldErrors(errors)
@@ -102,6 +469,12 @@ export default function ReportPage() {
 
     const isValid = validate()
     if (!isValid) return
+
+    const v = await validateTextWithAi(description)
+    if (!v.ok) {
+      setFormError(v.error || t('report.err.invalid_text', 'Invalid complaint text.'))
+      return
+    }
 
     setSubmitting(true)
 
@@ -135,20 +508,23 @@ export default function ReportPage() {
         }
       }
 
-      if (photo) {
-        const ai = await validateImageMatchesDescription(photo, description)
+      // Validate first photo if attached
+      if (photos.length > 0) {
+        const ai = await validateImageMatchesDescription(photos[0], description)
         if (!ai.ok) {
-          setFormError(ai.reason || t('report.err.photo_mismatch', 'The attached photo does not appear to match the description.'))
+          setFormError(t('report.err.photo_mismatch', 'The attached photo does not appear to match the description.'))
           setSubmitting(false)
           return
         }
       }
 
-      // If a photo is attached, include a local preview URL and, if Supabase enabled, upload to storage for a public URL
+      // If photos are attached, include local preview URLs and, if Supabase enabled, upload to storage for public URLs
       let media: string[] = []
-      if (photo) {
+      for (const photo of photos) {
         try { media.push(URL.createObjectURL(photo)) } catch {}
-        if (isSupabaseEnabled()) {
+      }
+      if (isSupabaseEnabled() && photos.length > 0) {
+        for (const photo of photos) {
           try {
             const publicUrl = await supabaseUploadReportPhoto(reportId, photo)
             if (publicUrl) media.unshift(publicUrl)
@@ -159,6 +535,7 @@ export default function ReportPage() {
       const newReport: Report = {
         report_id: reportId,
         category,
+        other_category: category === 'Other' ? otherCategory.trim() : null,
         description,
         summary:
           category +
@@ -201,8 +578,8 @@ export default function ReportPage() {
       setLocationText('')
       setDescription('')
       setIncidentTime('')
-      setPhoto(null)
-      setPhotoPreview(null)
+      setPhotos([])
+      setPhotoPreviews([])
       setFieldErrors({})
       setPickedLat(null)
       setPickedLng(null)
@@ -215,17 +592,29 @@ export default function ReportPage() {
   }
 
   const onPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0] || null
-    setPhoto(f)
-    if (f) {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    const newFiles = Array.from(files)
+    setPhotos(prev => [...prev, ...newFiles])
+    const newPreviews = newFiles.map(f => {
       try {
-        setPhotoPreview(URL.createObjectURL(f))
+        return URL.createObjectURL(f)
       } catch {
-        setPhotoPreview(null)
+        return null
       }
-    } else {
-      setPhotoPreview(null)
-    }
+    }).filter(Boolean) as string[]
+    setPhotoPreviews(prev => [...prev, ...newPreviews])
+    // Reset input so same files can be selected again
+    e.target.value = ''
+  }
+
+  const removePhoto = (index: number) => {
+    setPhotos(prev => prev.filter((_, i) => i !== index))
+    setPhotoPreviews(prev => {
+      const url = prev[index]
+      if (url) URL.revokeObjectURL(url)
+      return prev.filter((_, i) => i !== index)
+    })
   }
 
   return (
@@ -243,10 +632,34 @@ export default function ReportPage() {
 
         <div className="rounded-2xl border bg-card shadow-sm">
           <div className="border-b bg-muted/60 px-6 py-4">
-            <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{t('report.title', 'Report a civic issue')}</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {t('report.subtitle', 'Help your local authorities respond faster by sharing clear details.')}
-            </p>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{t('report.title', 'Report a civic issue')}</h1>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {t('report.subtitle', 'Help your local authorities respond faster by sharing clear details.')}
+                </p>
+              </div>
+
+              <div className="shrink-0">
+                <div
+                  className={[
+                    'inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold',
+                    aiValidating
+                      ? 'border-border bg-background text-muted-foreground'
+                      : displayScore >= 70
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : displayScore >= 50
+                          ? 'border-amber-200 bg-amber-50 text-amber-700'
+                          : 'border-rose-200 bg-rose-50 text-rose-700'
+                  ].join(' ')}
+                  title={t('report.score_title', 'Report Quality Score')}
+                >
+                  {aiValidating
+                    ? t('report.score_checking', 'Checking…')
+                    : `${t('report.score', 'Score')}: ${displayScore}`}
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="px-6 py-6 sm:py-8">
@@ -261,6 +674,38 @@ export default function ReportPage() {
               </div>
             )}
 
+            <div className="mb-4 flex items-center justify-end gap-1.5 sm:gap-2">
+              <button
+                type="button"
+                className="inline-flex items-center rounded-full border border-border bg-background px-2 sm:px-3 py-1 text-[10px] sm:text-xs text-muted-foreground hover:text-foreground whitespace-nowrap"
+                onClick={handleVoiceToggle}
+                aria-pressed={voiceEnabled}
+              >
+                {voiceEnabled ? '🔊 On' : '🔇 Off'}
+              </button>
+              <select
+                className="h-7 sm:h-8 min-w-[70px] sm:min-w-[90px] rounded-full border border-border bg-background px-2 sm:px-3 text-[10px] sm:text-xs text-foreground"
+                value={voiceLang}
+                onChange={(e) => handleVoiceLangChange(e.target.value as any)}
+                disabled={!voiceEnabled}
+                aria-label={t('voice.language', 'Voice language')}
+              >
+                <option value="en-IN">English</option>
+                <option value="hi-IN">Hindi</option>
+                <option value="mr-IN">Marathi</option>
+              </select>
+              <select
+                className="h-7 sm:h-8 min-w-[60px] sm:min-w-[70px] rounded-full border border-border bg-background px-2 sm:px-3 text-[10px] sm:text-xs text-foreground"
+                value={voiceGender}
+                onChange={(e) => handleVoiceGenderChange(e.target.value as 'male' | 'female')}
+                disabled={!voiceEnabled}
+                aria-label={t('voice.gender', 'Voice gender')}
+              >
+                <option value="female">Female</option>
+                <option value="male">Male</option>
+              </select>
+            </div>
+
             <form onSubmit={submit} className="space-y-6">
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
@@ -270,16 +715,19 @@ export default function ReportPage() {
                   </Label>
                   <UISelect
                     id={categoryId}
-                    className="mt-1"
+                    className="mt-1 w-full"
                     value={category}
                     aria-invalid={!!fieldErrors.category}
                     aria-describedby={
                       'report-category-help' + (fieldErrors.category ? ' report-category-error' : '')
                     }
                     onChange={(e) => {
-                      setCategory((e.target as HTMLSelectElement).value)
+                      const v = (e.target as HTMLSelectElement).value
+                      setCategory(v)
+                      if (v !== 'Other') setOtherCategory('')
                       setFieldErrors((prev) => ({ ...prev, category: undefined }))
                     }}
+                    onFocus={() => playVoiceGuide('category')}
                     options={categories.map((c) => ({ value: c, label: c }))}
                   />
                   <p
@@ -295,6 +743,21 @@ export default function ReportPage() {
                   )}
                 </div>
 
+                {category === 'Other' && (
+                  <div>
+                    <Label htmlFor="report-other-category">{t('report.other_issue', 'Other issue type')}<span className="ml-0.5 text-destructive">*</span></Label>
+                    <Input
+                      id="report-other-category"
+                      className="mt-1"
+                      value={otherCategory}
+                      onChange={(e) => setOtherCategory(e.target.value)}
+                      onFocus={() => playVoiceGuide('other')}
+                      placeholder={t('report.other_issue_ph', 'e.g., Noise pollution, Stray dogs, Encroachment')}
+                      maxLength={80}
+                    />
+                  </div>
+                )}
+
                 <div>
                   <Label htmlFor={priorityId} className="flex items-center gap-2">
                     <Flag className="h-4 w-4 text-blue-600" aria-hidden="true" />
@@ -302,7 +765,7 @@ export default function ReportPage() {
                   </Label>
                   <UISelect
                     id={priorityId}
-                    className="mt-1"
+                    className="mt-1 w-full"
                     value={priority}
                     aria-invalid={!!fieldErrors.priority}
                     aria-describedby={
@@ -312,6 +775,7 @@ export default function ReportPage() {
                       setPriority((e.target as HTMLSelectElement).value as any)
                       setFieldErrors((prev) => ({ ...prev, priority: undefined }))
                     }}
+                    onFocus={() => playVoiceGuide('priority')}
                     options={priorities.map((p) => ({ value: p, label: p }))}
                   />
                   <p
@@ -334,20 +798,60 @@ export default function ReportPage() {
                     <MapPin className="h-4 w-4 text-emerald-600" aria-hidden="true" />
                     {t('report.location', 'Location')}<span className="ml-0.5 text-destructive">*</span>
                   </Label>
-                  <Input
-                    id={locationId}
-                    className="mt-1"
-                    value={locationText}
-                    aria-invalid={!!fieldErrors.location}
-                    aria-describedby={
-                      'report-location-help' + (fieldErrors.location ? ' report-location-error' : '')
-                    }
-                    onChange={(e) => {
-                      setLocationText(e.target.value)
-                      setFieldErrors((prev) => ({ ...prev, location: undefined }))
-                    }}
-                    placeholder={t('report.location_placeholder', 'e.g. Kothrud, Pune – near XYZ Chowk. Google Maps link if available.')}
-                  />
+                  <div className="mt-1 flex gap-2">
+                    <Input
+                      id={locationId}
+                      className="flex-1"
+                      value={locationText}
+                      aria-invalid={!!fieldErrors.location}
+                      aria-describedby={
+                        'report-location-help' + (fieldErrors.location ? ' report-location-error' : '')
+                      }
+                      onChange={(e) => {
+                        setLocationText(e.target.value)
+                        setFieldErrors((prev) => ({ ...prev, location: undefined }))
+                      }}
+                      onFocus={() => playVoiceGuide('location')}
+                      placeholder={t('report.location_placeholder', 'e.g. Kothrud, Pune – near XYZ Chowk. Google Maps link if available.')}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="shrink-0 px-3"
+                      onClick={async () => {
+                        if (!navigator.geolocation) {
+                          alert(t('report.geolocation_not_supported', 'Geolocation is not supported by your browser'))
+                          return
+                        }
+                        navigator.geolocation.getCurrentPosition(
+                          async (pos) => {
+                            const { latitude, longitude } = pos.coords
+                            setPickedLat(latitude)
+                            setPickedLng(longitude)
+                            // Try to get address via reverse geocoding
+                            try {
+                              const address = await reverseGeocode(latitude, longitude)
+                              if (address) {
+                                setLocationText(address)
+                              } else {
+                                setLocationText(prev => prev || `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`)
+                              }
+                            } catch {
+                              setLocationText(prev => prev || `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`)
+                            }
+                            setFieldErrors((prev) => ({ ...prev, location: undefined }))
+                          },
+                          (err) => {
+                            console.error('Geolocation error:', err)
+                            alert(t('report.geolocation_error', 'Could not get your location. Please enter manually.'))
+                          },
+                          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+                        )
+                      }}
+                    >
+                      <MapPin className="h-4 w-4" />
+                    </Button>
+                  </div>
                   <p
                     id="report-location-help"
                     className="mt-1 text-xs text-muted-foreground"
@@ -362,64 +866,63 @@ export default function ReportPage() {
                 </div>
               </div>
 
-              <div>
-                <Label htmlFor={descriptionId} className="flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-sky-700" aria-hidden="true" />
-                  {t('report.description', 'Description')}<span className="ml-0.5 text-destructive">*</span>
-                </Label>
-                <Textarea
-                  id={descriptionId}
-                  className="mt-1"
-                  rows={5}
-                  value={description}
-                  aria-invalid={!!fieldErrors.description}
-                  aria-describedby={
-                    'report-description-help' +
-                    (fieldErrors.description ? ' report-description-error' : '')
-                  }
-                  onChange={(e) => {
-                    setDescription(e.target.value)
-                    setFieldErrors((prev) => ({ ...prev, description: undefined }))
-                  }}
-                  placeholder={
-                    t('report.description_placeholder', '• What happened?\n• Since when?\n• How does it affect people or services?')
-                  }
-                />
-                <p
-                  id="report-description-help"
-                  className="mt-1 text-xs text-muted-foreground"
-                >
-                  {t('report.description_help', 'Share clear, factual details. Avoid sharing personal information about others.')}
-                </p>
-                {fieldErrors.description && (
-                  <p id="report-description-error" className="mt-1 text-xs text-destructive">
-                    {fieldErrors.description}
-                  </p>
-                )}
+              <div className="space-y-2">
+                <Label>Description</Label>
+                <div className="relative">
+                  <Textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    rows={4}
+                    placeholder="Describe the issue, impact, and exact spot."
+                    onFocus={() => playVoiceGuide('description')}
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-2 top-2 inline-flex items-center justify-center rounded-md border border-border bg-background/80 p-1.5 text-muted-foreground hover:text-foreground"
+                    onClick={startDictation}
+                    title={dictating ? t('voice.listening', 'Listening…') : t('voice.dictate', 'Dictate')}
+                  >
+                    <Mic className={['h-4 w-4', dictating ? 'text-primary' : ''].join(' ')} />
+                  </button>
+                </div>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <Label htmlFor={photoId} className="flex items-center gap-2">
                     <ImageIcon className="h-4 w-4 text-slate-700" aria-hidden="true" />
-                    {t('report.photo', 'Attach photo')} <span className="text-xs text-muted-foreground">({t('report.optional', 'optional')})</span>
+                    {t('report.photo', 'Attach photos')} <span className="text-xs text-muted-foreground">({t('report.optional', 'optional')})</span>
                   </Label>
                   <Input
                     id={photoId}
                     className="mt-1 cursor-pointer"
                     type="file"
                     accept="image/*"
+                    multiple
                     onChange={onPhotoChange}
                   />
-                  {photoPreview && (
-                    <img
-                      src={photoPreview}
-                      alt="Attached issue preview"
-                      className="mt-2 h-28 w-40 rounded border object-cover"
-                    />
+                  {photoPreviews.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {photoPreviews.map((preview, idx) => (
+                        <div key={idx} className="relative">
+                          <img
+                            src={preview}
+                            alt={`Attached issue preview ${idx + 1}`}
+                            className="h-20 w-20 rounded border object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removePhoto(idx)}
+                            className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-destructive text-destructive-foreground text-xs flex items-center justify-center hover:bg-destructive/80"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   )}
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {t('report.photo_help', 'A clear photo often helps departments verify and resolve issues faster.')}
+                    {t('report.photo_help', 'Clear photos help departments verify and resolve issues faster. You can add multiple photos.')}
                   </p>
                 </div>
 
@@ -435,6 +938,7 @@ export default function ReportPage() {
                     type="datetime-local"
                     value={incidentTime}
                     onChange={(e) => setIncidentTime(e.target.value)}
+                    onFocus={() => playVoiceGuide('time')}
                   />
                   <p className="mt-1 text-xs text-muted-foreground">
                     {t('report.incident_time_help', 'Helps authorities understand when the issue started or was noticed.')}
@@ -443,9 +947,12 @@ export default function ReportPage() {
               </div>
 
               <div className="flex items-center justify-end border-t pt-4">
-                <Button type="submit" loading={submitting} className="min-w-[150px]">
-                  {submitting ? t('report.submitting') : t('report.submit')}
+                <Button type="submit" loading={submitting} disabled={submitting || (isSupabaseEnabled() && !aiOk && description.trim().length >= 3)} className="min-w-[150px]">
+                  {submitting ? t('report.submitting') : (aiValidating ? t('report.validating', 'Checking…') : t('report.submit'))}
                 </Button>
+                {aiError && (
+                  <div className="ml-3 text-xs text-destructive">{aiError}</div>
+                )}
               </div>
             </form>
           </div>

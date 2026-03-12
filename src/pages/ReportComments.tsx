@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Comment, CommentLike, Report } from '@/lib/types'
-import { isSupabaseEnabled } from '@/lib/supabase'
-import { supabaseGetReportById, supabaseInsertComment, supabaseListComments, supabaseListReportMedia, supabaseListCommentLikes, supabaseToggleCommentLike } from '@/lib/api'
+import { getSupabase, isSupabaseEnabled } from '@/lib/supabase'
+import { supabaseGetReportById, supabaseInsertComment, supabaseListComments, supabaseListReportMedia, supabaseListCommentLikes, supabaseToggleCommentLike, supabaseDeleteComment } from '@/lib/api'
 import LoadingOverlay from '@/components/LoadingOverlay'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, SendHorizontal, MessageCircle, Heart } from 'lucide-react'
+import { ArrowLeft, SendHorizontal, MessageCircle, Heart, Trash2 } from 'lucide-react'
 import { t, useLang } from '@/lib/i18n'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -28,6 +28,89 @@ export default function ReportCommentsPage() {
   const [likes, setLikes] = useState<CommentLike[]>([])
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
+  const [aiValidating, setAiValidating] = useState(false)
+  const [aiOk, setAiOk] = useState(true)
+
+  // Local bad word filter
+  const BAD_WORDS = [
+    'idiot', 'stupid', 'bloody', 'abuse',
+    'harami', 'nalayak', 'chutiya', 'madarchod',
+    'fuck', 'fucking', 'fucked', 'fucker', 'fuckers',
+    'shit', 'shitty', 'bullshit', 'bull shit',
+    'damn', 'dammit', 'goddamn',
+    'ass', 'asshole', 'assholes',
+    'bastard', 'bastards',
+    'bitch', 'bitches', 'bitching',
+    'crap', 'crappy',
+    'dick', 'dicks', 'dickhead',
+    'piss', 'pissed', 'pissing',
+    'whore', 'whores',
+    'slut', 'sluts',
+    'cock', 'cocks',
+    'pussy', 'pussies',
+    'wanker', 'wankers',
+    'suck', 'sucks', 'sucking',
+    'mc', 'bc', 'mkc', 'maderchod', 'bhenchod', 'bhadwa', 'randi', 'randwa'
+  ]
+
+  const containsBadWords = (txt: string): boolean => {
+    const lower = txt.toLowerCase()
+    return BAD_WORDS.some(word => lower.includes(word))
+  }
+
+  async function validateCommentWithAi(inputText: string) {
+    const msg = String(inputText || '').trim()
+    if (!msg) {
+      setAiOk(false)
+      return { ok: false, error: 'Message required' } as const
+    }
+    
+    // Local bad word check
+    if (containsBadWords(msg)) {
+      setAiOk(false)
+      return { ok: false, error: 'Abusive language detected. Please use respectful language.' } as const
+    }
+    
+    if (!isSupabaseEnabled()) {
+      setAiOk(true)
+      return { ok: true } as const
+    }
+    const sb = getSupabase()
+    if (!sb) {
+      setAiOk(true)
+      return { ok: true } as const
+    }
+    setAiValidating(true)
+    try {
+      const res = await sb.functions.invoke('summarize', { body: { text: msg } })
+      const data = (res as any)?.data as any
+      const ok = Boolean(data?.ok)
+      const status = typeof data?.status === 'string' ? data.status : null
+      const err = typeof data?.error === 'string' ? data.error : null
+      const accepted = ok && (!status || status === 'accepted')
+      if (!accepted) {
+        setAiOk(false)
+        return { ok: false, error: err || 'Message contains disallowed content.' } as const
+      }
+      setAiOk(true)
+      return { ok: true } as const
+    } catch {
+      // Local bad word check already done above
+      setAiOk(true)
+      return { ok: true } as const
+    } finally {
+      setAiValidating(false)
+    }
+  }
+
+  useEffect(() => {
+    let alive = true
+    const id = window.setTimeout(() => {
+      if (!alive) return
+      validateCommentWithAi(text)
+    }, 450)
+    return () => { alive = false; window.clearTimeout(id) }
+  }, [text])
 
   useEffect(() => {
     let mounted = true
@@ -43,6 +126,7 @@ export default function ReportCommentsPage() {
             setComments([])
             return
           }
+
           const media = await supabaseListReportMedia([id])
           setReport({ ...r, media: media[id] || r.media || [], timeline: r.timeline || [] })
           const cmts = await supabaseListComments(id)
@@ -63,6 +147,17 @@ export default function ReportCommentsPage() {
     return () => { mounted = false }
   }, [id])
 
+  async function handleDeleteComment(commentId: string) {
+    if (!id) return
+    if (!isSupabaseEnabled()) return
+    const ok = await supabaseDeleteComment(commentId)
+    if (ok) {
+      const [cmts, lks] = await Promise.all([supabaseListComments(id), supabaseListCommentLikes(id)])
+      setComments(cmts)
+      setLikes(lks)
+    }
+  }
+
   const headerTitle = useMemo(() => {
     if (!report) return t('report_comments.title', 'Comments')
     return t('report_comments.title_for', 'Comments')
@@ -73,6 +168,8 @@ export default function ReportCommentsPage() {
     const msg = (text || '').trim()
     if (!msg) return
     if (!isSupabaseEnabled()) return
+    const v = await validateCommentWithAi(msg)
+    if (!v.ok) return
     setSending(true)
     try {
       const author = user?.name || 'Citizen'
@@ -190,7 +287,19 @@ export default function ReportCommentsPage() {
                         >
                           {c.author}
                         </button>
-                        <div className="text-[11px] text-muted-foreground">{new Date(c.at).toLocaleString()}</div>
+                        <div className="flex items-center gap-2">
+                          <div className="text-[11px] text-muted-foreground">{new Date(c.at).toLocaleString()}</div>
+                          {user?.name && c.author === user.name && (
+                            <button
+                              type="button"
+                              className="inline-flex items-center text-muted-foreground hover:text-destructive"
+                              onClick={() => handleDeleteComment(c.id)}
+                              title={t('common.delete', 'Delete')}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <div className="mt-1 text-sm text-foreground whitespace-pre-wrap leading-relaxed">{c.message}</div>
 
@@ -234,7 +343,7 @@ export default function ReportCommentsPage() {
                 <Button
                   className="rounded-2xl"
                   onClick={handleSend}
-                  disabled={sending || !text.trim()}
+                  disabled={sending || aiValidating || !text.trim() || !aiOk}
                 >
                   <SendHorizontal className="h-4 w-4 mr-2" />
                   {sending ? t('common.sending', 'Sending…') : t('report_detail.post_comment', 'Post comment')}

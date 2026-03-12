@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NagrikGPT Voice Guide</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 500px;
+        }
+
+        h2 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 25px;
+        }
+
+        /* Top Controls Bar */
+        .controls-header {
+            display: grid;
+            grid-template-columns: 1fr 1fr auto; /* Language | Gender | Button */
+            gap: 10px;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            border: 1px solid #ddd;
+            align-items: center;
+        }
+
+        .control-group label {
+            display: block;
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 4px;
+        }
+
+        select {
+            width: 100%;
+            padding: 6px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+        }
+
+        .voice-toggle {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            color: white;
+            align-self: end; /* Align with dropdowns */
+            height: fit-content;
+        }
+
+        .voice-on { background-color: #28a745; }
+        .voice-off { background-color: #dc3545; }
+
+        /* Form Styles */
+        .form-group { margin-bottom: 18px; }
+        
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+            color: #444;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 15px;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            border-color: #007bff;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(0,123,255,0.2);
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 12px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .submit-btn:hover { background-color: #0056b3; }
+
+        /* Debug log style (hidden by default, visible in console) */
+        .debug-log {
+            font-size: 10px;
+            color: red;
+            text-align: center;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>NagrikGPT Demo</h2>
+
+    <!-- Top Controls -->
+    <div class="controls-header">
+        <div class="control-group">
+            <label>Language</label>
+            <select id="langSelector">
+                <option value="english">English</option>
+                <option value="hindi">हिंदी</option>
+                <option value="marathi">मराठी</option>
+            </select>
+        </div>
+        
+        <div class="control-group">
+            <label>Voice Type</label>
+            <select id="genderSelector">
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+            </select>
+        </div>
+
+        <button id="voiceToggle" class="voice-toggle voice-on">🔊 On</button>
+    </div>
+
+    <!-- Form -->
+    <form id="civicForm">
+        <div class="form-group">
+            <label for="category">Issue Category</label>
+            <select id="category">
+                <option value="">Select...</option>
+                <option value="potholes">Potholes</option>
+                <option value="garbage">Garbage</option>
+                <option value="lights">Street Light</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="priority">Priority</label>
+            <select id="priority">
+                <option value="">Select...</option>
+                <option value="low">Low</option>
+                <option value="high">Urgent</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="location">Location</label>
+            <input type="text" id="location" placeholder="Enter address">
+        </div>
+
+        <div class="form-group">
+            <label for="description">Description</label>
+            <textarea id="description" rows="3"></textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="photo">Photo</label>
+            <input type="file" id="photo">
+        </div>
+        
+        <div class="form-group">
+            <label for="incident_time">Time</label>
+            <input type="datetime-local" id="incident_time">
+        </div>
+
+        <button type="button" class="submit-btn">Submit</button>
+    </form>
+    
+    <div class="debug-log" id="debugLog"></div>
+</div>
+
+<script>
+    // --- Configuration ---
+    // Map Element ID -> Base Filename
+    const audioMap = {
+        "category": "category",
+        "priority": "priority",
+        "location": "location",
+        "description": "description",
+        "photo": "photo",
+        "incident_time": "time"
+    };
+    const langConfirmKey = "lang_confirm"; // Base name for language switch
+    const fileExtension = ".mp3"; // or .wav
+
+    // --- State ---
+    let currentLang = 'english';
+    let currentGender = 'male';
+    let voiceEnabled = true;
+    let currentAudio = null;
+
+    // --- Elements ---
+    const langSelector = document.getElementById('langSelector');
+    const genderSelector = document.getElementById('genderSelector');
+    const voiceToggle = document.getElementById('voiceToggle');
+    const debugLog = document.getElementById('debugLog');
+
+    // --- Core Logic ---
+
+    function getAudioPath(filenameKey) {
+        // Constructs: "english/category (male).mp3"
+        return `${currentLang}/${filenameKey} (${currentGender})${fileExtension}`;
+    }
+
+    function playAudio(filenameKey) {
+        if (!voiceEnabled) return;
+
+        // Stop previous audio
+        if (currentAudio) {
+            currentAudio.pause();
+            currentAudio.currentTime = 0;
+        }
+
+        const path = getAudioPath(filenameKey);
+        
+        // Debugging: Show path in console to verify file names
+        console.log("Trying to play:", path);
+        debugLog.textContent = "Loading: " + path;
+
+        currentAudio = new Audio(path);
+
+        currentAudio.play().catch(error => {
+            console.error("Playback Error:", error);
+            debugLog.textContent = "Error playing: " + path;
+        });
+    }
+
+    // --- Event Listeners ---
+
+    // 1. Language Change
+    langSelector.addEventListener('change', (e) => {
+        currentLang = e.target.value;
+        // Play confirmation: "Language set to..."
+        playAudio(langConfirmKey); 
+    });
+
+    // 2. Gender Change
+    genderSelector.addEventListener('change', (e) => {
+        currentGender = e.target.value;
+        // Play confirmation with new voice
+        playAudio(langConfirmKey);
+    });
+
+    // 3. Toggle Button
+    voiceToggle.addEventListener('click', () => {
+        voiceEnabled = !voiceEnabled;
+        voiceToggle.textContent = voiceEnabled ? "🔊 On" : "🔇 Off";
+        voiceToggle.className = voiceEnabled ? "voice-toggle voice-on" : "voice-toggle voice-off";
+    });
+
+    // 4. Form Field Focus
+    for (const elementId in audioMap) {
+        const element = document.getElementById(elementId);
+        if (element) {
+            element.addEventListener('focus', () => {
+                playAudio(audioMap[elementId]);
+            });
+        }
+    }
+
+</script>
+
+</body>
+</html>

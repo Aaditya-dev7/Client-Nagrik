@@ -6,7 +6,7 @@ import { loadReports } from '@/lib/storage'
 import { isSupabaseEnabled, supabaseListReports, supabaseListTimelines, subscribeReports, supabaseListReportMedia } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import LoadingOverlay from '@/components/LoadingOverlay'
-import { MapPin, Flag, Clock, User, Eye, Building2, BadgeCheck } from 'lucide-react'
+import { MapPin, Flag, Clock, User, Eye, Building2, BadgeCheck, LogOut, FileText, Award } from 'lucide-react'
 import { t, useLang } from '@/lib/i18n'
 
 function getPriorityClass(priority: Report['priority']) {
@@ -33,10 +33,15 @@ const statusClasses: Record<Report['status'], string> = {
 
 export default function ProfilePage() {
   const _lang = useLang()
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
   const [list, setList] = useState<Report[]>([])
   const nav = useNavigate()
   const [loading, setLoading] = useState(true)
+
+  const handleLogout = () => {
+    logout()
+    nav('/login')
+  }
 
   useEffect(() => {
     let mounted = true
@@ -83,28 +88,48 @@ export default function ProfilePage() {
   const myTier = myKarma >= 200 ? 'Legend' : myKarma >= 100 ? 'Pro' : myKarma >= 50 ? 'Active' : 'Newcomer'
 
   return (
-    <div className="relative min-h-[calc(100vh-4rem)] bg-background px-4 sm:px-6 lg:px-8 py-8">
+    <div className="relative min-h-[calc(100vh-4rem)] bg-background px-4 sm:px-6 lg:px-8 py-6">
       <LoadingOverlay show={loading && list.length === 0} label={t('profile.loading', 'Loading your reports…')} />
       <div className="mx-auto max-w-6xl">
-        <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="rounded-2xl bg-card border border-border shadow-sm px-6 py-5">
-            <div className="text-xs text-muted-foreground">{t('profile.user', 'User')}</div>
-            <div className="mt-1 text-lg font-semibold text-foreground truncate">{user?.name || 'Citizen'}</div>
+        {/* Profile Header - Circular Photo, Name, Stats */}
+        <div className="flex flex-col items-center mb-8">
+          {/* Circular Profile Photo */}
+          <div className="w-24 h-24 rounded-full bg-gradient-to-br from-primary to-orange-400 flex items-center justify-center text-white text-3xl font-bold shadow-lg">
+            {user?.name?.charAt(0)?.toUpperCase() || 'C'}
           </div>
-          <div className="rounded-2xl bg-card border border-border shadow-sm px-6 py-5">
-            <div className="text-xs text-muted-foreground">{t('profile.reports_submitted', 'Reports submitted')}</div>
-            <div className="mt-1 text-2xl font-extrabold text-primary">{myCount}</div>
-          </div>
-          <div className="rounded-2xl bg-card border border-border shadow-sm px-6 py-5">
-            <div className="text-xs text-muted-foreground">{t('profile.karma_popularity', 'Karma · Popularity')}</div>
-            <div className="mt-1 flex items-baseline gap-2">
-              <div className="text-2xl font-extrabold text-primary">{myKarma}</div>
-              <span className="text-xs px-2 py-1 rounded-full bg-primary-light text-primary border border-border">{myTier}</span>
+          {/* Username */}
+          <h1 className="mt-3 text-xl font-bold text-foreground">{user?.name || 'Citizen'}</h1>
+          <span className="text-sm text-muted-foreground">{myTier} Contributor</span>
+        </div>
+
+        {/* Stats Cards - Horizontal */}
+        <div className="grid grid-cols-2 gap-3 mb-6 max-w-md mx-auto">
+          <div className="rounded-2xl bg-card border border-border shadow-sm px-4 py-4 text-center">
+            <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-primary-light mb-2">
+              <FileText className="h-5 w-5 text-primary" />
             </div>
+            <div className="text-2xl font-extrabold text-foreground">{myCount}</div>
+            <div className="text-xs text-muted-foreground">{t('profile.reports_submitted', 'Reports')}</div>
+          </div>
+          <div className="rounded-2xl bg-card border border-border shadow-sm px-4 py-4 text-center">
+            <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-amber-100 mb-2">
+              <Award className="h-5 w-5 text-amber-600" />
+            </div>
+            <div className="text-2xl font-extrabold text-foreground">{myKarma}</div>
+            <div className="text-xs text-muted-foreground">{t('profile.karma_popularity', 'Karma')}</div>
           </div>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2">
+        {/* My Reports Section */}
+        <div className="max-w-md mx-auto mb-3">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <FileText className="h-4 w-4 text-primary" />
+            {t('profile.my_reports', 'My Reports')} ({myCount})
+          </h2>
+        </div>
+
+        {/* Reports List */}
+        <div className="grid gap-4 md:grid-cols-2 mb-6">
           {my.length === 0 && (
             <p className="text-sm text-muted-foreground">
               {t('profile.empty', 'You have not submitted any reports yet.')}
@@ -229,7 +254,18 @@ export default function ProfilePage() {
               </article>
             )
           })}
-        </div>
+          </div>
+      </div>
+      
+      {/* Logout Button - Mobile only since desktop has it in header */}
+      <div className="max-w-md mx-auto mt-6 sm:hidden">
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors"
+        >
+          <LogOut className="h-4 w-4" />
+          {t('auth.logout', 'Logout')}
+        </button>
       </div>
     </div>
   )

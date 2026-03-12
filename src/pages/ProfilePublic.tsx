@@ -67,7 +67,7 @@ export default function ProfilePublicPage() {
 
         <div className="grid gap-6 md:grid-cols-2">
           {list.length === 0 && (
-            <p className="text-sm text-muted-foreground">{t('profile.empty', 'No reports found.')}</p>
+            <p className="text-sm text-muted-foreground">{t('profile.empty', 'No reports submitted.')}</p>
           )}
           {list.map((r) => (
             <article key={r.report_id} className="overflow-hidden rounded-3xl bg-card shadow-sm border border-border flex flex-col">

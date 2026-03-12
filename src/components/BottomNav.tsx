@@ -5,9 +5,9 @@ import { t } from '@/lib/i18n'
 const items = [
   { to: '/', label: 'nav.home', fallback: 'Home', icon: Home },
   { to: '/community', label: 'nav.community', fallback: 'Feed', icon: Users },
-  { to: '/report', label: 'report.submit', fallback: 'Report', icon: PlusCircle, emphasize: true },
+  { to: '/report', label: 'nav.submit', fallback: 'Submit', icon: PlusCircle, emphasize: true },
   { to: '/map', label: 'map.title', fallback: 'Map', icon: Map },
-  { to: '/profile', label: 'nav.my_reports', fallback: 'Profile', icon: UserIcon },
+  { to: '/profile', label: 'nav.profile', fallback: 'Profile', icon: UserIcon },
 ]
 
 export default function BottomNav() {

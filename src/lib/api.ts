@@ -1,13 +1,15 @@
 import { getSupabase, isSupabaseEnabled } from '@/lib/supabase'
-import type { Report, TimelineItem, Comment, CommentLike } from '@/lib/types'
+import type { Report, TimelineItem, Comment, CommentLike, Notification } from '@/lib/types'
 
 // Map DB row to client Report
 function mapDbToReport(row: any): Report {
   return {
     report_id: row.id,
     category: row.category,
+    other_category: row.other_category ?? null,
     description: row.description,
     summary: row.summary ?? (row.category + ' issue: ' + (row.description || '').split(' ').slice(0, 12).join(' ') + (((row.description || '').split(' ').length > 12) ? '...' : '')),
+    report_score: typeof row.report_score === 'number' ? row.report_score : (row.report_score != null ? Number(row.report_score) : undefined),
     priority: row.priority,
     status: row.status,
     submitted_at: row.submitted_at,
@@ -22,8 +24,47 @@ function mapDbToReport(row: any): Report {
     assigned_officer_phone: row.assigned_officer_phone ?? null,
     assigned_officer_email: row.assigned_officer_email ?? null,
     deadline: row.deadline ?? null,
+    overdue_at: row.overdue_at ?? null,
     timeline: [],
   }
+}
+
+export function mapDbToNotification(row: any): Notification {
+  return {
+    id: row.id,
+    message: row.message,
+    timestamp: row.timestamp,
+    read: !!row.read,
+    report_id: row.report_id,
+    recipient_user_id: row.recipient_user_id ?? null,
+    recipient_role: row.recipient_role ?? null,
+    type: row.type ?? null,
+  }
+}
+
+export async function supabaseListNotifications(params?: { recipientRole?: 'citizen' | 'officer' | 'admin'; recipientUserId?: string; limit?: number }): Promise<Notification[]> {
+  const sb = getSupabase()
+  if (!sb) return []
+  let q: any = sb.from('notifications').select('*').order('timestamp', { ascending: false })
+  if (params?.recipientRole) q = q.eq('recipient_role', params.recipientRole)
+  if (params?.recipientUserId) q = q.eq('recipient_user_id', params.recipientUserId)
+  if (params?.limit) q = q.limit(params.limit)
+  const { data, error } = await q
+  if (error) return []
+  return (data || []).map(mapDbToNotification)
+}
+
+export function subscribeNotifications(onEvent: (e: { type: 'insert' | 'update' | 'delete'; row: any }) => void): () => void {
+  const sb = getSupabase()
+  if (!sb) return () => {}
+  const chan = sb.channel('notifications_citizen')
+  chan.on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, payload => {
+    if (payload.eventType === 'INSERT') onEvent({ type: 'insert', row: payload.new })
+    if (payload.eventType === 'UPDATE') onEvent({ type: 'update', row: payload.new })
+    if (payload.eventType === 'DELETE') onEvent({ type: 'delete', row: payload.old })
+  })
+  chan.subscribe()
+  return () => { sb.removeChannel(chan) }
 }
 
 export async function supabaseListCommentLikes(reportId: string): Promise<CommentLike[]> {
@@ -91,6 +132,13 @@ export async function supabaseInsertComment(input: { reportId: string; author: s
   return !error
 }
 
+export async function supabaseDeleteComment(commentId: string): Promise<boolean> {
+  const sb = getSupabase()
+  if (!sb) return false
+  const { error } = await sb.from('report_comments').delete().eq('id', commentId)
+  return !error
+}
+
 export async function supabaseDeleteReport(id: string): Promise<boolean> {
   const sb = getSupabase()
   if (!sb) return false
@@ -129,8 +177,10 @@ export async function supabaseInsertReport(r: Report): Promise<boolean> {
   const row = {
     id: r.report_id,
     category: r.category,
+    other_category: r.other_category ?? null,
     description: r.description,
     summary: r.summary,
+    report_score: typeof r.report_score === 'number' ? r.report_score : null,
     priority: r.priority,
     status: r.status,
     submitted_at: r.submitted_at,

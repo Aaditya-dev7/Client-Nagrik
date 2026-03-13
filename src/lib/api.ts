@@ -426,6 +426,29 @@ export function subscribeReports(onEvent: (e: SupaEvent) => void): () => void {
 
 export { isSupabaseEnabled }
 
+// Fetch citizen site configuration from database
+export async function getCitizenConfig(key: string): Promise<string | null> {
+  const sb = getSupabase()
+  if (!sb) return null
+  const { data, error } = await sb
+    .from('citizen_config')
+    .select('value')
+    .eq('key', key)
+    .maybeSingle()
+  if (error || !data) return null
+  return data.value
+}
+
+// Get the citizen site URL for redirects
+export async function getCitizenSiteUrl(): Promise<string> {
+  // First try to get from database config
+  const configUrl = await getCitizenConfig('CITIZEN_SITE_URL')
+  if (configUrl) return configUrl
+  
+  // Fallback to current window location
+  return window.location.origin
+}
+
 // Upload a photo to Supabase Storage under bucket 'reports' and return a public URL
 export async function supabaseUploadReportPhoto(reportId: string, file: File): Promise<string | null> {
   const sb = getSupabase()

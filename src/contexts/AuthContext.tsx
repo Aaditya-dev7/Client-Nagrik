@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { getSupabase, resetSupabaseClient } from '@/lib/supabase'
+import { getCitizenSiteUrl } from '@/lib/api'
 
 type User = { id: string; name: string; email: string; phone?: string }
 
@@ -91,6 +92,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const sb = getSupabase()
     if (!sb) throw new Error('Supabase is not configured')
     
+    // Get citizen site URL from database config
+    const citizenUrl = await getCitizenSiteUrl()
+    
     const { data, error } = await sb.auth.signUp({
       email,
       password,
@@ -99,8 +103,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           full_name: name,
           phone: phone || null,
         },
-        // Require email confirmation and redirect back to citizen login.
-        emailRedirectTo: `${window.location.origin}/login`,
+        // Use citizen site URL from database config for redirect
+        emailRedirectTo: `${citizenUrl}/login`,
       }
     })
     

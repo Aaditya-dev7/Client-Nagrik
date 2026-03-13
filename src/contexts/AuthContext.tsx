@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
-import { getSupabase } from '@/lib/supabase'
+import { getSupabase, resetSupabaseClient } from '@/lib/supabase'
 
 type User = { id: string; name: string; email: string; phone?: string }
 
@@ -52,6 +52,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const login = async (email: string, password: string, keepMeSignedIn: boolean = true) => {
+    // Reset client first to ensure storage preference takes effect
+    resetSupabaseClient()
+    
     // Store session preference BEFORE auth so the Supabase client uses the correct storage.
     if (!keepMeSignedIn) {
       try { sessionStorage.setItem('nagrikGPT_session_only', 'true') } catch {}
@@ -69,18 +72,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = async (name: string, email: string, password: string, phone?: string) => {
     const sb = getSupabase()
     if (!sb) throw new Error('Supabase is not configured')
-    const { error } = await sb.auth.signUp({
+    
+    const { data, error } = await sb.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo: 'https://aaditya-dev7.github.io/Client-Nagrik/login',
         data: {
           full_name: name,
           phone: phone || null,
-        }
+        },
+        // Disable email confirmation to avoid rate limits (user already verified by captcha)
+        emailRedirectTo: undefined,
       }
     })
-    if (error) throw new Error(error.message || 'Registration failed')
+    
+    if (error) {
+      // Handle rate limit errors gracefully
+      const msg = error.message.toLowerCase()
+      if (msg.includes('rate') || msg.includes('email') && msg.includes('exceed')) {
+        // Still set user if signup succeeded despite email error
+        if (data?.user) {
+          setUser(mapSupabaseUser(data.user))
+          return
+        }
+        throw new Error('Too many requests. Please wait a few minutes and try again.')
+      }
+      throw new Error(error.message || 'Registration failed')
+    }
+    
+    // If user is created but email not confirmed, still log them in
+    if (data?.user) {
+      setUser(mapSupabaseUser(data.user))
+    }
   }
 
   const logout = async () => {

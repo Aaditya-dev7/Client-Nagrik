@@ -27,13 +27,15 @@ export function Header() {
     let mounted = true
     ;(async () => {
       try {
-        const list = await supabaseListNotifications({ recipientRole: 'citizen', limit: 25 })
+        // Only fetch notifications for the current user, not all citizens
+        const list = await supabaseListNotifications({ recipientUserId: user?.id, limit: 25 })
         if (mounted) setNotifications(list)
       } catch {}
     })()
     const unsub = subscribeNotifications((e) => {
       const row = e.row as any
-      if (!row || row.recipient_role !== 'citizen') return
+      // Only add notifications meant for this specific user
+      if (!row || row.recipient_user_id !== user?.id) return
       const mapped = mapDbToNotification(row)
       setNotifications((prev) => {
         if (e.type === 'insert') return [mapped, ...prev.filter(n => n.id !== mapped.id)]
@@ -46,7 +48,7 @@ export function Header() {
       mounted = false
       try { unsub() } catch {}
     }
-  }, [])
+  }, [user?.id])
 
   // Close notifications when clicking outside
   useEffect(() => {

@@ -10,6 +10,12 @@ export function isSupabaseEnabled(): boolean {
   )
 }
 
+// Reset client to allow storage preference change to take effect
+export function resetSupabaseClient(): void {
+  client = null
+  lastStorage = null
+}
+
 export function getSupabase(): SupabaseClient | null {
   const url = import.meta.env.VITE_SUPABASE_URL
   const key = import.meta.env.VITE_SUPABASE_ANON_KEY

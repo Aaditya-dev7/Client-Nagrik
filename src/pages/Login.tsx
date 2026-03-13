@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { t } from '@/lib/i18n'
@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert } from '@/components/ui/alert'
 import { Eye, EyeOff, Mail, Lock, User, Phone, Shield, Check, X, AlertTriangle } from 'lucide-react'
+import { getSupabase } from '@/lib/supabase'
 
 // Password strength checker
 function checkPasswordStrength(password: string): { score: number; checks: { label: string; passed: boolean }[] } {
@@ -47,8 +48,56 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [keepMeSignedIn, setKeepMeSignedIn] = useState(true) // Default to true
+  const [verificationMsg, setVerificationMsg] = useState('')
 
   const passwordStrength = checkPasswordStrength(password)
+
+  useEffect(() => {
+    const sb = getSupabase()
+    if (!sb) return
+
+    let cancelled = false
+
+    const run = async () => {
+      try {
+        const url = new URL(window.location.href)
+        const code = url.searchParams.get('code')
+        const errorCode = url.searchParams.get('error_code') || url.searchParams.get('error')
+
+        const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash
+        const hashParams = new URLSearchParams(hash)
+        const access_token = hashParams.get('access_token')
+        const refresh_token = hashParams.get('refresh_token')
+        const type = hashParams.get('type')
+
+        if (errorCode) {
+          if (!cancelled) setVerificationMsg('')
+          return
+        }
+
+        if (code) {
+          const { error } = await sb.auth.exchangeCodeForSession(code)
+          if (error) return
+          if (cancelled) return
+          setVerificationMsg('Verification completed. You can now sign in.')
+          window.history.replaceState({}, '', url.origin + url.pathname)
+          return
+        }
+
+        if (access_token && refresh_token && (type === 'recovery' || type === 'invite' || type === 'signup')) {
+          const { error } = await sb.auth.setSession({ access_token, refresh_token })
+          if (error) return
+          if (cancelled) return
+          setVerificationMsg('Verification completed. You can now sign in.')
+          window.history.replaceState({}, '', url.origin + url.pathname)
+          return
+        }
+      } catch {}
+    }
+
+    run()
+    return () => { cancelled = true }
+  }, [])
 
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {}
@@ -164,6 +213,12 @@ export default function Login() {
 
           {/* Form */}
           <form onSubmit={submit} className="p-6 space-y-4">
+            {verificationMsg && (
+              <Alert variant="success" className="flex items-center gap-2">
+                <Check className="h-4 w-4" />
+                {verificationMsg}
+              </Alert>
+            )}
             {err && (
               <Alert variant="error" className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4" />

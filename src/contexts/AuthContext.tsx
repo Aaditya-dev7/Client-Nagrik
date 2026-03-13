@@ -73,6 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email,
       password,
       options: {
+        emailRedirectTo: 'https://aaditya-dev7.github.io/Client-Nagrik/login',
         data: {
           full_name: name,
           phone: phone || null,

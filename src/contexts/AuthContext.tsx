@@ -6,7 +6,7 @@ type User = { id: string; name: string; email: string; phone?: string }
 type AuthContextType = {
   user: User | null
   login: (email: string, password: string, keepMeSignedIn?: boolean) => Promise<void>
-  register: (name: string, email: string, password: string, phone?: string) => Promise<void>
+  register: (name: string, email: string, password: string, phone?: string) => Promise<{ needsEmailConfirmation: boolean }>
   logout: () => Promise<void>
 }
 
@@ -51,6 +51,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  // Enable push notifications only when logged in
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const mod = await import('@/lib/notifications')
+        if (cancelled) return
+
+        if (user) {
+          await mod.subscribeToPushNotifications()
+        } else {
+          await mod.unsubscribeFromPushNotifications()
+        }
+      } catch {}
+    })()
+    return () => { cancelled = true }
+  }, [user?.id])
+
   const login = async (email: string, password: string, keepMeSignedIn: boolean = true) => {
     // Reset client first to ensure storage preference takes effect
     resetSupabaseClient()
@@ -81,8 +99,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           full_name: name,
           phone: phone || null,
         },
-        // Disable email confirmation to avoid rate limits (user already verified by captcha)
-        emailRedirectTo: undefined,
+        // Require email confirmation and redirect back to citizen login.
+        emailRedirectTo: `${window.location.origin}/login`,
       }
     })
     
@@ -90,20 +108,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Handle rate limit errors gracefully
       const msg = error.message.toLowerCase()
       if (msg.includes('rate') || msg.includes('email') && msg.includes('exceed')) {
-        // Still set user if signup succeeded despite email error
-        if (data?.user) {
-          setUser(mapSupabaseUser(data.user))
-          return
-        }
         throw new Error('Too many requests. Please wait a few minutes and try again.')
       }
       throw new Error(error.message || 'Registration failed')
     }
-    
-    // If user is created but email not confirmed, still log them in
-    if (data?.user) {
-      setUser(mapSupabaseUser(data.user))
-    }
+
+    // With email confirmation enabled, Supabase typically returns user but no session.
+    // Do NOT log in yet; user must confirm email and then sign in.
+    const needsEmailConfirmation = !data?.session
+    return { needsEmailConfirmation }
   }
 
   const logout = async () => {
@@ -112,6 +125,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null)
       return
     }
+
+    // Disable push notifications on logout
+    try {
+      const mod = await import('@/lib/notifications')
+      await mod.unsubscribeFromPushNotifications()
+    } catch {}
+
     await sb.auth.signOut()
     setUser(null)
     // Clear session preference

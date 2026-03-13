@@ -135,6 +135,7 @@ export default function Login() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setErr('')
+    setVerificationMsg('')
     
     if (!validateForm()) return
 
@@ -142,10 +143,16 @@ export default function Login() {
     try {
       if (mode === 'login') {
         await login(email, password, keepMeSignedIn)
+        nav('/report')
+        return
       } else {
-        await register(name, email, password, phone)
+        const res = await register(name, email, password, phone)
+        if (res?.needsEmailConfirmation) {
+          setMode('login')
+          setVerificationMsg('Verification email sent. Please confirm your email, then sign in.')
+          return
+        }
       }
-      nav('/report')
     } catch (e: any) {
       setErr(e.message || 'Authentication failed. Please try again.')
     } finally {

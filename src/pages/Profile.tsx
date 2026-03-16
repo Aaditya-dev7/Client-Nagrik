@@ -4,10 +4,23 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Report } from '@/lib/types'
 import { loadReports } from '@/lib/storage'
 import { isSupabaseEnabled, supabaseListReports, supabaseListTimelines, subscribeReports, supabaseListReportMedia } from '@/lib/api'
+import { getSupabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Modal } from '@/components/ui/modal'
+import { useToast } from '@/components/ui/toast'
 import LoadingOverlay from '@/components/LoadingOverlay'
-import { MapPin, Flag, Clock, User, Eye, Building2, BadgeCheck, LogOut, FileText, Award } from 'lucide-react'
+import { MapPin, Flag, Clock, User, Eye, Building2, BadgeCheck, LogOut, FileText, Award, Users, Star, Trophy, CheckCircle, XCircle } from 'lucide-react'
 import { t, useLang } from '@/lib/i18n'
+
+interface UserBadge {
+  id: string
+  name: string
+  description: string
+  icon: string
+  points: number
+  earned_at: string
+}
 
 function getPriorityClass(priority: Report['priority']) {
   switch (priority) {
@@ -34,9 +47,22 @@ const statusClasses: Record<Report['status'], string> = {
 export default function ProfilePage() {
   const _lang = useLang()
   const { user, logout } = useAuth()
+  const { addToast } = useToast()
   const [list, setList] = useState<Report[]>([])
   const nav = useNavigate()
   const [loading, setLoading] = useState(true)
+  const [badges, setBadges] = useState<UserBadge[]>([])
+  const [totalPoints, setTotalPoints] = useState(0)
+  const [showNSSDialog, setShowNSSDialog] = useState(false)
+  const [nssStatus, setNssStatus] = useState<string | null>(null)
+  const [nssForm, setNssForm] = useState({
+    full_name: '',
+    email: '',
+    phone: '',
+    college: '',
+    nss_unit: '',
+    department_preference: '',
+  })
 
   const handleLogout = async () => {
     await logout()
@@ -78,6 +104,92 @@ export default function ProfilePage() {
     }
   }, [])
 
+  // Fetch badges and NSS status
+  useEffect(() => {
+    if (!user?.id) return
+    const sb = getSupabase()
+    if (!sb) return
+
+    // Fetch user badges
+    sb.from('user_badges')
+      .select('earned_at, badges(id, name, description, icon, points)')
+      .eq('user_id', user.id)
+      .then(({ data, error }) => {
+        if (error) {
+          console.log('Badges fetch error (table may not exist):', error.message)
+          return
+        }
+        if (data) {
+          const mapped = data.map((ub: any) => ({
+            id: ub.badges?.id || '',
+            name: ub.badges?.name || 'Badge',
+            description: ub.badges?.description || '',
+            icon: ub.badges?.icon || 'award',
+            points: ub.badges?.points || 0,
+            earned_at: ub.earned_at,
+          }))
+          setBadges(mapped)
+          setTotalPoints(mapped.reduce((sum: number, b: UserBadge) => sum + b.points, 0))
+        }
+      })
+      .catch((err) => {
+        console.log('Badges fetch failed:', err)
+      })
+
+    // Fetch NSS status
+    sb.from('nss_registrations')
+      .select('*')
+      .eq('user_id', user.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (error) {
+          console.log('NSS fetch error (table may not exist):', error.message)
+          return
+        }
+        if (data) {
+          setNssStatus(data.status)
+        }
+      })
+      .catch((err) => {
+        console.log('NSS fetch failed:', err)
+      })
+  }, [user?.id])
+
+  const handleNSSSubmit = async () => {
+    const sb = getSupabase()
+    if (!sb || !user) return
+
+    const { error } = await sb.from('nss_registrations').insert({
+      user_id: user.id,
+      full_name: nssForm.full_name || user.name,
+      email: nssForm.email || user.email,
+      phone: nssForm.phone,
+      college: nssForm.college,
+      nss_unit: nssForm.nss_unit,
+      department_preference: nssForm.department_preference,
+      status: 'pending',
+    })
+
+    if (error) {
+      addToast(error.message, 'error')
+    } else {
+      addToast('NSS registration submitted for approval', 'success')
+      setNssStatus('pending')
+      setShowNSSDialog(false)
+    }
+  }
+
+  const getBadgeIcon = (icon: string) => {
+    switch (icon) {
+      case 'trophy': return <Trophy className="w-5 h-5" />
+      case 'star': return <Star className="w-5 h-5" />
+      case 'award': return <Award className="w-5 h-5" />
+      case 'file-plus': return <FileText className="w-5 h-5" />
+      case 'users': return <Users className="w-5 h-5" />
+      default: return <Award className="w-5 h-5" />
+    }
+  }
+
   const my = useMemo(
     () => list.filter((r) => r.reporter.name === (user?.name || 'Citizen')),
     [list, user],
@@ -104,9 +216,8 @@ export default function ProfilePage() {
           </div>
           <Button
             variant="outline"
-            size="sm"
             onClick={handleLogout}
-            className="flex items-center gap-2 text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
+            className="flex items-center gap-2 text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30 text-sm px-3 py-1.5"
           >
             <LogOut className="h-4 w-4" />
             <span className="hidden sm:inline">{t('auth.logout', 'Logout')}</span>
@@ -125,7 +236,7 @@ export default function ProfilePage() {
         </div>
 
         {/* Stats Cards - Horizontal */}
-        <div className="grid grid-cols-2 gap-3 mb-6 max-w-md mx-auto">
+        <div className="grid grid-cols-3 gap-3 mb-6 max-w-md mx-auto">
           <div className="rounded-2xl bg-card border border-border shadow-sm px-4 py-4 text-center">
             <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-primary-light mb-2">
               <FileText className="h-5 w-5 text-primary" />
@@ -137,8 +248,73 @@ export default function ProfilePage() {
             <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-amber-100 mb-2">
               <Award className="h-5 w-5 text-amber-600" />
             </div>
-            <div className="text-2xl font-extrabold text-foreground">{myKarma}</div>
-            <div className="text-xs text-muted-foreground">{t('profile.karma_popularity', 'Karma')}</div>
+            <div className="text-2xl font-extrabold text-foreground">{totalPoints || myKarma}</div>
+            <div className="text-xs text-muted-foreground">{t('profile.karma_popularity', 'Points')}</div>
+          </div>
+          <div className="rounded-2xl bg-card border border-border shadow-sm px-4 py-4 text-center">
+            <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-purple-100 mb-2">
+              <Star className="h-5 w-5 text-purple-600" />
+            </div>
+            <div className="text-2xl font-extrabold text-foreground">{badges.length}</div>
+            <div className="text-xs text-muted-foreground">Badges</div>
+          </div>
+        </div>
+
+        {/* Badges Section */}
+        {badges.length > 0 && (
+          <div className="max-w-md mx-auto mb-6">
+            <div className="rounded-2xl bg-card border border-border shadow-sm p-4">
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground mb-3">
+                <Award className="h-4 w-4 text-primary" />
+                Badges & Achievements
+              </h2>
+              <div className="grid grid-cols-3 gap-2">
+                {badges.map((badge) => (
+                  <div key={badge.id} className="flex flex-col items-center p-2 rounded-xl bg-muted/30 text-center">
+                    <div className="w-8 h-8 rounded-full bg-yellow-100 text-yellow-600 flex items-center justify-center mb-1">
+                      {getBadgeIcon(badge.icon)}
+                    </div>
+                    <div className="text-xs font-medium truncate w-full">{badge.name}</div>
+                    <div className="text-[10px] text-muted-foreground">{badge.points} pts</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* NSS Volunteer Section */}
+        <div className="max-w-md mx-auto mb-6">
+          <div className="rounded-2xl bg-card border border-border shadow-sm p-4">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground mb-3">
+              <Users className="h-4 w-4 text-primary" />
+              NSS Volunteer
+            </h2>
+            {nssStatus === 'approved' ? (
+              <div className="flex items-center gap-2 text-emerald-600 text-sm">
+                <CheckCircle className="w-5 h-5" />
+                <span>You are a registered NSS Volunteer</span>
+              </div>
+            ) : nssStatus === 'pending' ? (
+              <div className="flex items-center gap-2 text-amber-600 text-sm">
+                <Clock className="w-5 h-5" />
+                <span>Your NSS registration is pending approval</span>
+              </div>
+            ) : nssStatus === 'rejected' ? (
+              <div className="flex items-center gap-2 text-destructive text-sm">
+                <XCircle className="w-5 h-5" />
+                <span>Your NSS registration was rejected</span>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Register as an NSS (National Service Scheme) volunteer to contribute to community service and earn special badges.
+                </p>
+                <Button onClick={() => setShowNSSDialog(true)}>
+                  Register as NSS Volunteer
+                </Button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -289,6 +465,78 @@ export default function ProfilePage() {
           {t('auth.logout', 'Logout')}
         </button>
       </div>
+
+      {/* NSS Registration Modal */}
+      <Modal 
+        open={showNSSDialog} 
+        onClose={() => setShowNSSDialog(false)} 
+        title="NSS Volunteer Registration"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Full Name</label>
+            <Input 
+              value={nssForm.full_name || user?.name || ''} 
+              onChange={(e) => setNssForm({ ...nssForm, full_name: e.target.value })} 
+              placeholder="Your full name"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Email</label>
+            <Input 
+              type="email"
+              value={nssForm.email || user?.email || ''} 
+              onChange={(e) => setNssForm({ ...nssForm, email: e.target.value })} 
+              placeholder="Your email"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Phone</label>
+            <Input 
+              value={nssForm.phone} 
+              onChange={(e) => setNssForm({ ...nssForm, phone: e.target.value })} 
+              placeholder="Your phone number"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">College/Institution</label>
+            <Input 
+              value={nssForm.college} 
+              onChange={(e) => setNssForm({ ...nssForm, college: e.target.value })} 
+              placeholder="Your college name"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">NSS Unit</label>
+            <Input 
+              value={nssForm.nss_unit} 
+              onChange={(e) => setNssForm({ ...nssForm, nss_unit: e.target.value })} 
+              placeholder="NSS unit number"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Department Preference</label>
+            <select
+              value={nssForm.department_preference}
+              onChange={(e) => setNssForm({ ...nssForm, department_preference: e.target.value })}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              <option value="">Select department</option>
+              <option value="Roads">Roads</option>
+              <option value="Sanitation">Sanitation</option>
+              <option value="Water Supply">Water Supply</option>
+              <option value="Street Lighting">Street Lighting</option>
+              <option value="Drainage">Drainage</option>
+              <option value="Parks">Parks</option>
+            </select>
+          </div>
+          <div className="flex gap-3 justify-end pt-4">
+            <Button variant="outline" onClick={() => setShowNSSDialog(false)}>Cancel</Button>
+            <Button onClick={handleNSSSubmit}>Submit Registration</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

@@ -327,33 +327,47 @@ export async function supabaseInsertReport(r: Report): Promise<boolean> {
 
   const { data: uData, error: uErr } = await sb.auth.getUser()
   const authUser = uData?.user
-  if (uErr || !authUser) return false
+  if (uErr || !authUser) {
+    console.error('supabaseInsertReport: No auth user', uErr)
+    return false
+  }
 
   const row = {
     id: r.report_id,
     category: r.category,
     other_category: r.other_category ?? null,
     description: r.description,
-    summary: r.summary,
+    summary: r.summary ?? null,
     report_score: typeof r.report_score === 'number' ? r.report_score : null,
     priority: r.priority,
     status: r.status,
     submitted_at: r.submitted_at,
-    location_text: r.location_text,
-    lat: r.lat,
-    lng: r.lng,
-    reporter_name: r.reporter.name,
-    reporter_phone: r.reporter.phone,
-    anonymous: r.reporter.anonymous,
-    assigned_department: r.assigned_department,
-    assigned_officer_id: r.assigned_officer_id,
-    assigned_officer_name: r.assigned_officer_name,
-    deadline: r.deadline,
+    location_text: r.location_text ?? '',
+    lat: typeof r.lat === 'number' ? r.lat : null,
+    lng: typeof r.lng === 'number' ? r.lng : null,
+    reporter_name: r.reporter?.name || 'Citizen',
+    reporter_phone: r.reporter?.phone ?? null,
+    anonymous: r.reporter?.anonymous ?? false,
+    assigned_department: r.assigned_department ?? null,
+    assigned_officer_id: r.assigned_officer_id ?? null,
+    assigned_officer_name: r.assigned_officer_name ?? null,
+    deadline: r.deadline ?? null,
     created_by: authUser.id,
   }
+  
+  console.log('supabaseInsertReport: Inserting report', { id: row.id, category: row.category, lat: row.lat, lng: row.lng })
+  
   const { error } = await sb.from('reports').insert(row)
-  if (error) return false
-  await sb.from('report_timeline').insert({ report_id: r.report_id, actor: 'System', action: 'Report created', at: r.submitted_at })
+  if (error) {
+    console.error('supabaseInsertReport: Insert failed', error.message, error.details, error.hint, error.code)
+    return false
+  }
+  
+  const timelineErr = await sb.from('report_timeline').insert({ report_id: r.report_id, actor: 'System', action: 'Report created', at: r.submitted_at })
+  if (timelineErr.error) {
+    console.error('supabaseInsertReport: Timeline insert failed', timelineErr.error)
+  }
+  
   return true
 }
 

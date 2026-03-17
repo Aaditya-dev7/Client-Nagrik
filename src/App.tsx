@@ -22,9 +22,22 @@ import { loadReports } from '@/lib/storage'
 import { useLang } from '@/lib/i18n'
 
 function Protected({ children }: { children: JSX.Element }) {
-  const { user } = useAuth()
+  const { user, isLoading } = useAuth()
   const loc = useLocation()
+
+  // Wait for initial session restore before deciding.
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
+        <div className="h-10 w-10 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+      </div>
+    )
+  }
+
   if (!user && loc.pathname !== '/login') return <Navigate to="/login" replace />
+
+  // If already logged in, keep /login from showing.
+  if (user && loc.pathname === '/login') return <Navigate to="/" replace />
   return children
 }
 

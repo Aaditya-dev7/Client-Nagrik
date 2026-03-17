@@ -6,6 +6,7 @@ type User = { id: string; name: string; email: string; phone?: string }
 
 type AuthContextType = {
   user: User | null
+  isLoading: boolean
   login: (email: string, password: string, keepMeSignedIn?: boolean) => Promise<void>
   register: (name: string, email: string, password: string, phone?: string) => Promise<{ needsEmailConfirmation: boolean }>
   logout: () => Promise<void>
@@ -25,19 +26,32 @@ function mapSupabaseUser(u: any): User {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [clientSeed, setClientSeed] = useState(0)
+
+  const reinitClient = () => {
+    resetSupabaseClient()
+    setClientSeed((s) => s + 1)
+  }
 
   useEffect(() => {
     const sb = getSupabase()
-    if (!sb) return
+    if (!sb) {
+      setIsLoading(false)
+      return
+    }
 
     let cancelled = false
     ;(async () => {
+      if (!cancelled) setIsLoading(true)
       try {
         const { data } = await sb.auth.getSession()
         const u = data?.session?.user
         if (!cancelled) setUser(u ? mapSupabaseUser(u) : null)
       } catch {
         if (!cancelled) setUser(null)
+      } finally {
+        if (!cancelled) setIsLoading(false)
       }
     })()
 
@@ -50,7 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       cancelled = true
       try { sub?.subscription?.unsubscribe() } catch {}
     }
-  }, [])
+  }, [clientSeed])
 
   // Enable push notifications only when logged in
   useEffect(() => {
@@ -71,21 +85,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user?.id])
 
   const login = async (email: string, password: string, keepMeSignedIn: boolean = true) => {
-    // Reset client first to ensure storage preference takes effect
-    resetSupabaseClient()
-    
     // Store session preference BEFORE auth so the Supabase client uses the correct storage.
+    // Then reset the client so subsequent getSupabase() re-creates the client using the new storage.
     if (!keepMeSignedIn) {
       try { sessionStorage.setItem('nagrikGPT_session_only', 'true') } catch {}
     } else {
       try { sessionStorage.removeItem('nagrikGPT_session_only') } catch {}
     }
 
+    reinitClient()
+
     const sb = getSupabase()
     if (!sb) throw new Error('Supabase is not configured')
 
-    const { error } = await sb.auth.signInWithPassword({ email, password })
+    const { data, error } = await sb.auth.signInWithPassword({ email, password })
     if (error) throw new Error(error.message || 'Login failed')
+
+    // Set user immediately to prevent UI from briefly redirecting to /login.
+    const au = data?.user
+    if (au) setUser(mapSupabaseUser(au))
   }
 
   const register = async (name: string, email: string, password: string, phone?: string) => {
@@ -125,10 +143,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     const sb = getSupabase()
-    if (!sb) {
-      setUser(null)
-      return
+    const storageKey = 'gov_nagrik_citizen_auth'
+
+    const clearStorageKeys = (st: Storage | null) => {
+      if (!st) return
+      try {
+        const keys: string[] = []
+        for (let i = 0; i < st.length; i++) {
+          const k = st.key(i)
+          if (k) keys.push(k)
+        }
+        for (const k of keys) {
+          if (k === storageKey || k.includes(storageKey)) {
+            try { st.removeItem(k) } catch {}
+          }
+        }
+      } catch {}
     }
+
+    // Immediately clear local state so the UI can navigate away without waiting on network.
+    setUser(null)
 
     // Disable push notifications on logout
     try {
@@ -136,16 +170,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await mod.unsubscribeFromPushNotifications()
     } catch {}
 
-    await sb.auth.signOut()
-    setUser(null)
-    // Clear session preference
+    // Attempt Supabase signOut, but never block the UI indefinitely.
     try {
-      sessionStorage.removeItem('nagrikGPT_session_only')
+      await Promise.race([
+        sb?.auth.signOut() as any,
+        new Promise((resolve) => setTimeout(resolve, 2500)),
+      ])
     } catch {}
+
+    // Clear session preference
+    try { sessionStorage.removeItem('nagrikGPT_session_only') } catch {}
+
+    // Clear any persisted Supabase auth tokens to avoid phantom sessions.
+    clearStorageKeys(localStorage)
+    clearStorageKeys(sessionStorage)
+
+    // Reset the singleton client so the next page does not reuse stale auth state.
+    // Also forces our auth listener to re-subscribe against the new client instance.
+    reinitClient()
   }
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   )
